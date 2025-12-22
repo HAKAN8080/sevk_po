@@ -1268,13 +1268,9 @@ elif menu == "📈 Raporlar":
             if ihtiyac_kolon_adi in result_df.columns:
                 st.write(f"- İhtiyaç miktarı > 0: {(result_df[ihtiyac_kolon_adi] > 0).sum()}")
         
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📦 Ürün Analizi",
-            "🏪 Mağaza Analizi", 
-            "⚠️ Satış Kaybı Analizi",
-            "🗺️ İl Bazında Harita"
-        ])
-
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📦 Ürün Analizi", "🏪 Mağaza Analizi", "⚠️ Satış Kaybı Analizi", "🗺️ İl Bazında Harita", "📥 Dışa Aktar"])
+        
+ 
 
         # ============================================
         # ÜRÜN ANALİZİ - SADELEŞTİRİLMİŞ VERSİYON
@@ -1403,6 +1399,8 @@ elif menu == "📈 Raporlar":
             magaza_segment_kayip = magaza_segment_kayip.sort_values('Mağaza Segmenti')
             
             st.dataframe(magaza_segment_kayip, width='stretch', hide_index=True, height=250)
+        
+      
         
         # ============================================
         # İL BAZINDA HARİTA - SEVKİYAT/MAĞAZA BAZLI
@@ -1660,7 +1658,71 @@ elif menu == "📈 Raporlar":
                 
                 else:
                     st.warning("Harita için yeterli il verisi bulunamadı.")
-
+              # 📥 DIŞA AKTAR TAB
+        with tab5:
+            st.subheader("📥 Sevkiyat Verilerini Dışa Aktar")
+            
+            if st.session_state.sevkiyat_sonuc is not None:
+                final = st.session_state.sevkiyat_sonuc.copy()
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### 📋 SAP Formatı")
+                    st.caption("Sadece pozitif sevkiyatlar (magaza_kod, urun_kod, depo_kod, sevkiyat_miktari)")
+                    
+                    sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
+                    sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
+                    
+                    st.metric("Satır Sayısı", f"{len(sap_data):,}")
+                    
+                    st.download_button(
+                        label="📥 SAP CSV İndir",
+                        data=sap_data.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="rapor_download_sap"
+                    )
+                
+                with col2:
+                    st.markdown("### 📊 Tam Detay")
+                    st.caption("Tüm kolonlar dahil (segment, durum, kayıp vs.)")
+                    
+                    st.metric("Satır Sayısı", f"{len(final):,}")
+                    
+                    st.download_button(
+                        label="📥 Tam Detay CSV İndir",
+                        data=final.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name=f"sevkiyat_tam_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="rapor_download_full"
+                    )
+                
+                # Depo bazlı export
+                st.markdown("---")
+                st.markdown("### 🏭 Depo Bazlı Export")
+                
+                if 'depo_kod' in final.columns:
+                    depo_listesi = sorted(final['depo_kod'].unique())
+                    selected_depo = st.selectbox("Depo Seçin", options=['Tümü'] + list(depo_listesi), key="export_depo_select")
+                    
+                    if selected_depo != 'Tümü':
+                        depo_data = final[final['depo_kod'] == selected_depo]
+                    else:
+                        depo_data = final
+                    
+                    st.download_button(
+                        label=f"📥 {selected_depo} Deposu İndir",
+                        data=depo_data.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name=f"sevkiyat_depo_{selected_depo}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="rapor_download_depo"
+                    )
+            else:
+                st.warning("⚠️ Henüz hesaplama yapılmadı!")
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
 # ============================================

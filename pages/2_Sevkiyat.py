@@ -1538,12 +1538,11 @@ elif menu == "📈 Raporlar":
     ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
     kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
     
-    # TAB'LAR
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # TAB'LAR - Sadece seçilen tab yüklenir
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📦 Ürün Analizi",
         "🏪 Mağaza Analizi", 
-        "⚠️ Satış Kaybı Analizi",
-        "🗺️ İl Bazında Harita",
+        "🗺️ İl Bazında",
         "📥 Dışa Aktar"
     ])
 
@@ -1615,100 +1614,26 @@ elif menu == "📈 Raporlar":
         
         st.dataframe(magaza_segment_ozet, width='stretch', hide_index=True, height=250)
     
-    
-     
     # ============================================
-    # SATIŞ KAYBI ANALİZİ - SEGMENT BAZLI TABLOLAR
+    # İL BAZINDA - SADELEŞTİRİLMİŞ
     # ============================================
-    
     with tab3:
-        st.subheader("⚠️ Satış Kaybı Analizi")
+        st.subheader("🗺️ İl Bazında Sevkiyat")
         
-        sevkiyat_kolon = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
-        ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
-        kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
-        
-        st.markdown("### 📦 Ürün Cover Grup Bazında Satış Kaybı")
-        
-        urun_segment_kayip = result_df.groupby('urun_segment').agg({
-            'urun_kod': 'nunique',
-            kayip_kolon: 'sum',
-            ihtiyac_kolon: 'sum',
-            sevkiyat_kolon: 'sum'
-        }).reset_index()
-        
-        urun_segment_kayip.columns = ['Ürün Segmenti', 'Ürün Sayısı', 'Toplam Kayıp', 'Toplam İhtiyaç', 'Toplam Sevkiyat']
-        
-        urun_segment_kayip['Kayıp Oranı %'] = np.where(
-            urun_segment_kayip['Toplam İhtiyaç'] > 0,
-            (urun_segment_kayip['Toplam Kayıp'] / urun_segment_kayip['Toplam İhtiyaç'] * 100),
-            0
-        ).round(1)
-        
-        urun_segment_kayip = urun_segment_kayip.sort_values('Ürün Segmenti')
-        
-        st.dataframe(urun_segment_kayip, width='stretch', hide_index=True, height=250)
-        
-        st.markdown("---")
-        
-        st.markdown("### 🏪 Mağaza Cover Grup Bazında Satış Kaybı")
-        
-        magaza_segment_kayip = result_df.groupby('magaza_segment').agg({
-            'magaza_kod': 'nunique',
-            kayip_kolon: 'sum',
-            ihtiyac_kolon: 'sum',
-            sevkiyat_kolon: 'sum'
-        }).reset_index()
-        
-        magaza_segment_kayip.columns = ['Mağaza Segmenti', 'Mağaza Sayısı', 'Toplam Kayıp', 'Toplam İhtiyaç', 'Toplam Sevkiyat']
-        
-        magaza_segment_kayip['Kayıp Oranı %'] = np.where(
-            magaza_segment_kayip['Toplam İhtiyaç'] > 0,
-            (magaza_segment_kayip['Toplam Kayıp'] / magaza_segment_kayip['Toplam İhtiyaç'] * 100),
-            0
-        ).round(1)
-        
-        magaza_segment_kayip = magaza_segment_kayip.sort_values('Mağaza Segmenti')
-        
-        st.dataframe(magaza_segment_kayip, width='stretch', hide_index=True, height=250)
-    
-    # ============================================
-    # İL BAZINDA HARİTA - SEVKİYAT/MAĞAZA BAZLI
-    # ============================================
-    with tab4:
-        st.subheader("🗺️ İl Bazında Sevkiyat Haritası")
-        
-        # Plotly kontrolü
-        try:
-            import plotly.express as px
-            import plotly.graph_objects as go
-            PLOTLY_AVAILABLE = True
-        except ImportError:
-            st.error("Plotly kütüphanesi yüklü değil! requirements.txt dosyasına 'plotly' ekleyin.")
-            PLOTLY_AVAILABLE = False
-        
-        if not PLOTLY_AVAILABLE:
-            st.stop()
-            
-        if st.session_state.magaza_master is None:
-            st.warning("⚠️ Mağaza Master verisi yüklenmemiş! Harita için il bilgisi gerekiyor.")
+        if st.session_state.magaza_master is None or 'il' not in st.session_state.magaza_master.columns:
+            st.warning("⚠️ Mağaza Master'da il bilgisi yok!")
         else:
-            # KOLON ADI DÜZELTMESİ
-            sevkiyat_kolon = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
-            ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
-            
             # İl bazında verileri hazırla
+            magaza_master_il = st.session_state.magaza_master[['magaza_kod', 'il']].copy()
+            magaza_master_il['magaza_kod'] = magaza_master_il['magaza_kod'].astype(str)
+            
             il_verileri = result_df.groupby('magaza_kod').agg({
                 sevkiyat_kolon: 'sum',
                 ihtiyac_kolon: 'sum'
             }).reset_index()
-            
-            # Mağaza master'dan il bilgilerini ekle
-            magaza_master = st.session_state.magaza_master[['magaza_kod', 'il']].copy()
-            magaza_master['magaza_kod'] = magaza_master['magaza_kod'].astype(str)
             il_verileri['magaza_kod'] = il_verileri['magaza_kod'].astype(str)
             
-            il_verileri = il_verileri.merge(magaza_master, on='magaza_kod', how='left')
+            il_verileri = il_verileri.merge(magaza_master_il, on='magaza_kod', how='left')
             
             # İl bazında toplamlar
             il_bazinda = il_verileri.groupby('il').agg({
@@ -1718,337 +1643,89 @@ elif menu == "📈 Raporlar":
             }).reset_index()
             
             il_bazinda.columns = ['İl', 'Toplam Sevkiyat', 'Toplam İhtiyaç', 'Mağaza Sayısı']
-            
-            # Ortalama sevkiyat/mağaza hesapla
             il_bazinda['Sevkiyat/Mağaza'] = (il_bazinda['Toplam Sevkiyat'] / il_bazinda['Mağaza Sayısı']).round(0)
-            
-            # Karşılama oranı da ekleyelim
             il_bazinda['Karşılama %'] = np.where(
                 il_bazinda['Toplam İhtiyaç'] > 0,
                 (il_bazinda['Toplam Sevkiyat'] / il_bazinda['Toplam İhtiyaç'] * 100),
                 0
             ).round(1)
             
-            # Türkiye il koordinatları
-            turkiye_iller = {
-                'İstanbul': (41.0082, 28.9784), 'Ankara': (39.9334, 32.8597), 'İzmir': (38.4237, 27.1428),
-                'Bursa': (40.1885, 29.0610), 'Antalya': (36.8969, 30.7133), 'Adana': (37.0000, 35.3213),
-                'Konya': (37.8667, 32.4833), 'Gaziantep': (37.0662, 37.3833), 'Şanlıurfa': (37.1591, 38.7969),
-                'Mersin': (36.8000, 34.6333), 'Kocaeli': (40.8533, 29.8815), 'Diyarbakır': (37.9144, 40.2306),
-                'Hatay': (36.4018, 36.3498), 'Manisa': (38.6191, 27.4289), 'Kayseri': (38.7312, 35.4787),
-                'Samsun': (41.2928, 36.3313), 'Balıkesir': (39.6484, 27.8826), 'Kahramanmaraş': (37.5858, 36.9371),
-                'Van': (38.4891, 43.4080), 'Aydın': (37.8560, 27.8416), 'Tekirdağ': (40.9781, 27.5117),
-                'Denizli': (37.7765, 29.0864), 'Muğla': (37.2153, 28.3636), 'Eskişehir': (39.7767, 30.5206),
-                'Trabzon': (41.0015, 39.7178), 'Ordu': (40.9833, 37.8833), 'Afyonkarahisar': (38.7638, 30.5403),
-                'Sivas': (39.7477, 37.0179), 'Malatya': (38.3552, 38.3095), 'Erzurum': (39.9000, 41.2700),
-                'Elazığ': (38.6810, 39.2264), 'Batman': (37.8812, 41.1351), 'Kütahya': (39.4167, 29.9833),
-                'Çorum': (40.5506, 34.9556), 'Isparta': (37.7648, 30.5566), 'Osmaniye': (37.2130, 36.1763),
-                'Çanakkale': (40.1553, 26.4142), 'Giresun': (40.9128, 38.3895), 'Aksaray': (38.3687, 34.0370),
-                'Yozgat': (39.8200, 34.8044), 'Edirne': (41.6667, 26.5667), 'Düzce': (40.8433, 31.1565),
-                'Tokat': (40.3167, 36.5500), 'Kastamonu': (41.3767, 33.7765), 'Uşak': (38.6823, 29.4082),
-                'Kırklareli': (41.7333, 27.2167), 'Niğde': (37.9667, 34.6833), 'Rize': (41.0201, 40.5234),
-                'Amasya': (40.6500, 35.8333), 'Bolu': (40.7333, 31.6000), 'Nevşehir': (38.6939, 34.6857),
-                'Bilecik': (40.1500, 29.9833), 'Burdur': (37.7167, 30.2833), 'Kırıkkale': (39.8468, 33.5153),
-                'Karabük': (41.2000, 32.6333), 'Karaman': (37.1759, 33.2287), 'Kırşehir': (39.1500, 34.1667),
-                'Sinop': (42.0231, 35.1531), 'Hakkari': (37.5833, 43.7333), 'Iğdır': (39.9167, 44.0333),
-                'Yalova': (40.6500, 29.2667), 'Bartın': (41.6344, 32.3375), 'Ardahan': (41.1105, 42.7022),
-                'Bayburt': (40.2552, 40.2249), 'Kilis': (36.7164, 37.1156), 'Muş': (38.9462, 41.7539),
-                'Siirt': (37.9333, 41.9500), 'Tunceli': (39.1071, 39.5400), 'Şırnak': (37.5164, 42.4611),
-                'Bitlis': (38.4000, 42.1000), 'Artvin': (41.1667, 41.8333), 'Gümüşhane': (40.4603, 39.4814),
-                'Ağrı': (39.7191, 43.0513), 'Erzincan': (39.7500, 39.5000), 'Adıyaman': (37.7648, 38.2786),
-                'Zonguldak': (41.4564, 31.7987), 'Mardin': (37.3212, 40.7245), 'Sakarya': (40.6937, 30.4358)
-            }
+            # Sıralı tablo göster
+            il_siralama = il_bazinda.sort_values('Toplam Sevkiyat', ascending=False)
+            st.dataframe(il_siralama, use_container_width=True, hide_index=True, height=400)
             
-            # Koordinatları dataframe'e ekle
-            il_bazinda['lat'] = il_bazinda['İl'].map(lambda x: turkiye_iller.get(x, (0, 0))[0])
-            il_bazinda['lon'] = il_bazinda['İl'].map(lambda x: turkiye_iller.get(x, (0, 0))[1])
+            # İl bazlı indirme
+            from io import BytesIO
+            il_buffer = BytesIO()
+            il_siralama.to_excel(il_buffer, index=False, engine='openpyxl')
+            il_buffer.seek(0)
             
-            # Koordinatı olmayan illeri filtrele
-            il_bazinda = il_bazinda[il_bazinda['lat'] != 0]
-            
-            if len(il_bazinda) > 0:
-                # Interaktif harita oluştur - SEVKİYAT/MAĞAZA BAZLI
-                st.subheader("📍 İl Bazında Ortalama Sevkiyat/Mağaza")
-                
-                fig = px.scatter_mapbox(
-                    il_bazinda,
-                    lat="lat",
-                    lon="lon", 
-                    hover_name="İl",
-                    hover_data={
-                        'Sevkiyat/Mağaza': ':,.0f',
-                        'Toplam Sevkiyat': ':,.0f',
-                        'Mağaza Sayısı': ':,.0f',
-                        'Karşılama %': ':.1f',
-                        'lat': False,
-                        'lon': False
-                    },
-                    color="Sevkiyat/Mağaza",
-                    color_continuous_scale="RdYlGn",  # Kırmızı -> Sarı -> Yeşil
-                    size="Sevkiyat/Mağaza",
-                    size_max=30,
-                    zoom=4.5,
-                    center={"lat": 39.0, "lon": 35.0},
-                    height=600,
-                    title="Türkiye İl Bazında Ortalama Sevkiyat/Mağaza Dağılımı"
-                )
-                
-                fig.update_layout(
-                    mapbox_style="open-street-map",
-                    margin={"r": 0, "t": 30, "l": 0, "b": 0},
-                    coloraxis_colorbar=dict(
-                        title="Sevkiyat/Mağaza",
-                        tickformat=",d"
-                    )
-                )
-                
-                st.info("🔍 Haritayı mouse tekerleği ile zoom in/out yapabilir, sürükleyerek hareket ettirebilirsiniz. Renk ne kadar yeşile yakınsa sevkiyat/mağaza o kadar yüksek.")
-                
-                st.plotly_chart(fig, use_container_width=True, key="turkey_map")
-                
-                # İl seçimi için dropdown
-                st.markdown("---")
-                st.subheader("🔍 İl Detayları")
-                
-                secilen_il = st.selectbox(
-                    "Detayını görmek istediğiniz ili seçin:",
-                    options=il_bazinda['İl'].sort_values().tolist(),
-                    key="il_secim_dropdown"
-                )
-                
-                if secilen_il:
-                    # Seçilen ilin detaylarını göster
-                    il_detay = il_bazinda[il_bazinda['İl'] == secilen_il].iloc[0]
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        try:
-                            val = il_detay['Sevkiyat/Mağaza']
-                            val_str = f"{float(val):,.0f}" if pd.notna(val) and val != '' else "0"
-                        except:
-                            val_str = "0"
-                        st.metric("Sevkiyat/Mağaza", val_str)
-                    
-                    with col2:
-                        try:
-                            val = il_detay['Toplam Sevkiyat']
-                            val_str = f"{float(val):,.0f}" if pd.notna(val) and val != '' else "0"
-                        except:
-                            val_str = "0"
-                        st.metric("Toplam Sevkiyat", val_str)
-                    
-                    with col3:
-                        try:
-                            val = il_detay['Mağaza Sayısı']
-                            val_str = f"{float(val):,.0f}" if pd.notna(val) and val != '' else "0"
-                        except:
-                            val_str = "0"
-                        st.metric("Mağaza Sayısı", val_str)
-                    
-                    with col4:
-                        try:
-                            val = il_detay['Karşılama %']
-                            val_str = f"{float(val):.1f}%" if pd.notna(val) and val != '' else "0%"
-                        except:
-                            val_str = "0%"
-                        st.metric("Karşılama %", val_str)
-                    
-                    # Seçilen ildeki mağaza detayları
-                    st.subheader(f"🏪 {secilen_il} İlindeki Mağaza Performansları")
-                    
-                    try:
-                        magaza_detay = result_df[result_df['magaza_kod'].isin(
-                            magaza_master[magaza_master['il'] == secilen_il]['magaza_kod'].astype(str)
-                        )]
-                        
-                        if len(magaza_detay) > 0:
-                            magaza_ozet = magaza_detay.groupby('magaza_kod').agg({
-                                sevkiyat_kolon: 'sum',
-                                ihtiyac_kolon: 'sum',
-                                'urun_kod': 'nunique'
-                            }).reset_index()
-                            
-                            magaza_ozet.columns = ['Mağaza Kodu', 'Toplam Sevkiyat', 'Toplam İhtiyaç', 'Ürün Sayısı']
-                            
-                            magaza_ozet['Karşılama %'] = np.where(
-                                magaza_ozet['Toplam İhtiyaç'] > 0,
-                                (magaza_ozet['Toplam Sevkiyat'] / magaza_ozet['Toplam İhtiyaç'] * 100),
-                                0
-                            ).round(1)
-                            
-                            # Sevkiyata göre sırala
-                            magaza_ozet = magaza_ozet.sort_values('Toplam Sevkiyat', ascending=False)
-                            
-                            st.dataframe(
-                                magaza_ozet.style.format({
-                                    'Toplam Sevkiyat': '{:,.0f}',
-                                    'Toplam İhtiyaç': '{:,.0f}',
-                                    'Ürün Sayısı': '{:.0f}',
-                                    'Karşılama %': '{:.1f}%'
-                                }),
-                                use_container_width=True,
-                                height=300,
-                                hide_index=True
-                            )
-                        else:
-                            st.info("Bu ilde mağaza verisi bulunamadı.")
-                            
-                    except Exception as e:
-                        st.error(f"Mağaza detayları yüklenirken hata oluştu: {str(e)}")
-                
-                # İl bazında özet tablo
-                st.markdown("---")
-                st.subheader("📊 Tüm İller - Sevkiyat/Mağaza Sıralaması")
-                
-                il_siralama = il_bazinda[['İl', 'Mağaza Sayısı', 'Toplam Sevkiyat', 'Sevkiyat/Mağaza', 'Karşılama %']].copy()
-                il_siralama = il_siralama.sort_values('Sevkiyat/Mağaza', ascending=False)
-                
-                st.dataframe(
-                    il_siralama.style.format({
-                        'Mağaza Sayısı': '{:,.0f}',
-                        'Toplam Sevkiyat': '{:,.0f}',
-                        'Sevkiyat/Mağaza': '{:,.0f}',
-                        'Karşılama %': '{:.1f}%'
-                    }),
-                    use_container_width=True,
-                    hide_index=True,
-                    height=400
-                )
-                
-                # İndirme butonu
-                st.download_button(
-                    label="📥 İl Bazında Analiz İndir (CSV)",
-                    data=il_bazinda.to_csv(index=False, encoding='utf-8-sig'),
-                    file_name="il_bazinda_analiz.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key="download_il_analiz"
-                )
-            
-            else:
-                st.warning("Harita için yeterli il verisi bulunamadı.")
+            st.download_button(
+                label="📥 İl Bazlı Rapor İndir",
+                data=il_buffer.getvalue(),
+                file_name="il_bazli_sevkiyat.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="il_rapor_indir"
+            )
     
     # ============================================
-    # 📥 DIŞA AKTAR TAB - EXCEL FORMATI
+    # 📥 DIŞA AKTAR TAB - SADELEŞTİRİLMİŞ
     # ============================================
-    with tab5:
-        st.subheader("📥 Sevkiyat Verilerini Dışa Aktar")
+    with tab4:
+        st.subheader("📥 Sevkiyat Verilerini İndir")
         
-        if st.session_state.sevkiyat_sonuc is not None:
-            final = st.session_state.sevkiyat_sonuc.copy()
+        final = st.session_state.sevkiyat_sonuc
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📋 SAP Formatı")
+            st.caption("Sadece pozitif sevkiyatlar")
             
-            # Segment kolonlarını Excel-safe yap (zaten Seg_ prefix var ama kontrol edelim)
-            for col in ['urun_segment', 'magaza_segment']:
-                if col in final.columns:
-                    # Eğer Seg_ ile başlamıyorsa ekle
-                    final[col] = final[col].astype(str).apply(lambda x: x if x.startswith('Seg_') else f"Seg_{x}")
+            sap_data = final[final['sevkiyat_miktari'] > 0][['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']]
+            st.metric("Satır Sayısı", f"{len(sap_data):,}")
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 📋 SAP Formatı")
-                st.caption("Sadece pozitif sevkiyatlar (magaza_kod, urun_kod, depo_kod, sevkiyat_miktari)")
-                
-                sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
-                sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
-                
-                st.metric("Satır Sayısı", f"{len(sap_data):,}")
-                
-                # Excel export
+            # Butona basınca Excel oluştur
+            if st.button("📥 SAP Excel Hazırla", key="sap_hazirla"):
                 from io import BytesIO
                 sap_buffer = BytesIO()
                 sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
                 sap_buffer.seek(0)
-                
+                st.session_state['sap_excel'] = sap_buffer.getvalue()
+                st.success("✅ SAP Excel hazır!")
+            
+            if 'sap_excel' in st.session_state:
                 st.download_button(
-                    label="📥 SAP Excel İndir",
-                    data=sap_buffer.getvalue(),
+                    label="⬇️ SAP Excel İndir",
+                    data=st.session_state['sap_excel'],
                     file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="rapor_download_sap"
+                    key="sap_indir"
                 )
+        
+        with col2:
+            st.markdown("### 📊 Tam Detay")
+            st.caption("Tüm kolonlar dahil")
             
-            with col2:
-                st.markdown("### 📊 Tam Detay")
-                st.caption("Tüm kolonlar dahil (segment, durum, KPI, cover vs.)")
-                
-                st.metric("Satır Sayısı", f"{len(final):,}")
-                
+            st.metric("Satır Sayısı", f"{len(final):,}")
+            
+            # Butona basınca Excel oluştur
+            if st.button("📥 Tam Detay Excel Hazırla", key="full_hazirla"):
+                from io import BytesIO
                 full_buffer = BytesIO()
                 final.to_excel(full_buffer, index=False, engine='openpyxl')
                 full_buffer.seek(0)
-                
+                st.session_state['full_excel'] = full_buffer.getvalue()
+                st.success("✅ Tam Detay Excel hazır!")
+            
+            if 'full_excel' in st.session_state:
                 st.download_button(
-                    label="📥 Tam Detay Excel İndir",
-                    data=full_buffer.getvalue(),
-                    file_name=f"sevkiyat_tam_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    label="⬇️ Tam Detay Excel İndir",
+                    data=st.session_state['full_excel'],
+                    file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="rapor_download_full"
+                    key="full_indir"
                 )
-            
-            # Depo bazlı export
-            st.markdown("---")
-            st.markdown("### 🏭 Depo Bazlı Export")
-            
-            if 'depo_kod' in final.columns:
-                depo_listesi = sorted(final['depo_kod'].unique())
-                selected_depo = st.selectbox("Depo Seçin", options=['Tümü'] + [str(d) for d in depo_listesi], key="export_depo_select")
-                
-                if selected_depo != 'Tümü':
-                    depo_data = final[final['depo_kod'].astype(str) == selected_depo]
-                else:
-                    depo_data = final
-                
-                st.metric("Seçili Satır Sayısı", f"{len(depo_data):,}")
-                
-                depo_buffer = BytesIO()
-                depo_data.to_excel(depo_buffer, index=False, engine='openpyxl')
-                depo_buffer.seek(0)
-                
-                st.download_button(
-                    label=f"📥 {selected_depo} Deposu Excel İndir",
-                    data=depo_buffer.getvalue(),
-                    file_name=f"sevkiyat_depo_{selected_depo}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="rapor_download_depo"
-                )
-            
-            # Kolon açıklamaları
-            st.markdown("---")
-            st.markdown("### 📋 Kolon Açıklamaları")
-            with st.expander("Kolonların Anlamları"):
-                st.markdown("""
-                | Kolon | Açıklama |
-                |-------|----------|
-                | sira_no | Satır numarası |
-                | oncelik | Öncelik sırası |
-                | magaza_kod | Mağaza kodu |
-                | urun_kod | Ürün kodu |
-                | magaza_segment | Mağaza cover segmenti (Seg_X-Y) |
-                | urun_segment | Ürün cover segmenti (Seg_X-Y) |
-                | durum | İhtiyaç türü (RPT/Initial/Min) |
-                | stok | Mağaza stok adedi |
-                | yol | Yoldaki miktar |
-                | satis | Satış adedi |
-                | Ilk_Nihai_Cover | (stok+yol)/satış |
-                | ihtiyac_miktari | Hesaplanan ihtiyaç |
-                | sevkiyat_miktari | Atanan sevkiyat |
-                | depo_kod | Depo kodu |
-                | stok_yoklugu_satis_kaybi | Karşılanamayan ihtiyaç |
-                | KPI_Min | KPI'dan gelen min değer |
-                | KPI_Max | KPI'dan gelen max değer |
-                | KPI_Forward_Cover | KPI'dan gelen forward cover |
-                | Ilk_Depo_Stok | Depo stok (CSV'den) |
-                | Son_Nihai_Stok | stok+yol+sevkiyat_miktari |
-                | Son_Nihai_Cover | Son_Nihai_Stok/satış |
-                """)
-        else:
-            st.warning("⚠️ Henüz hesaplama yapılmadı!")
-
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
 # ============================================

@@ -1288,7 +1288,38 @@ elif menu == "📐 Hesaplama":
             result = result.merge(depo_stok_merge, on=['depo_kod', 'urun_kod'], how='left')
             result['ilk_depo_stok'] = result['ilk_depo_stok'].fillna(0)
             
-            # Hesaplanan kolonlar
+            # ============================================
+            # PAKET BİLGİSİ EKLE (Ürün Master'dan)
+            # ============================================
+            if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
+                paket_master = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
+                paket_master['urun_kod'] = paket_master['urun_kod'].astype(str)
+                paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
+                paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1
+                
+                result = result.merge(paket_master, on='urun_kod', how='left')
+                result['paket_ici'] = result['paket_ici'].fillna(1).astype(int)
+            else:
+                result['paket_ici'] = 1
+            
+            # Sevkiyat paket adeti hesapla
+            result['sevkiyat_paket_adet'] = np.where(
+                result['paket_ici'] > 0,
+                np.ceil(result['sevkiyat_miktari'] / result['paket_ici']).astype(int),
+                0
+            )
+            
+            # ============================================
+            # KPI DURUM KOLONLARI EKLE
+            # ============================================
+            
+            # Aktif nokta (stok>0 OR satis>0 OR yol>0)
+            result['aktif_nokta'] = np.where(
+                (result['stok'] > 0) | (result['satis'] > 0) | (result['yol'] > 0),
+                1, 0
+            )
+            
+            # Hesaplanan kolonlar (cover için)
             result['ilk_nihai_cover'] = np.where(
                 result['satis'] > 0,
                 (result['stok'] + result['yol']) / result['satis'],
@@ -1303,11 +1334,53 @@ elif menu == "📐 Hesaplama":
                 0
             ).round(2)
             
+            # KPI Durum belirleme
+            def belirle_kpi_durum(row):
+                durumlar = []
+                
+                # Sadece aktif noktalar için kontrol
+                if row['aktif_nokta'] == 0:
+                    return 'Pasif'
+                
+                # Min altı kontrolü
+                mevcut_stok = row['stok'] + row['yol']
+                if mevcut_stok < row['kpi_min']:
+                    durumlar.append('Min_Alti')
+                
+                # Max üstü kontrolü
+                if mevcut_stok > row['kpi_max']:
+                    durumlar.append('Max_Ustu')
+                
+                # Cover > 12 hafta
+                if row['ilk_nihai_cover'] > 12:
+                    durumlar.append('Cover>12')
+                
+                # Cover < 4 hafta (satış varsa)
+                if row['satis'] > 0 and 0 < row['ilk_nihai_cover'] < 4:
+                    durumlar.append('Cover<4')
+                
+                # İhtiyaç > 100 ama sevkiyat = 0
+                if row.get('ihtiyac', 0) > 100 and row['sevkiyat_miktari'] == 0:
+                    durumlar.append('Ihtiyac_Karsilanamadi')
+                
+                # BKM filtresi (eğer varsa)
+                if row.get('brut_kar_filtreli', False):
+                    durumlar.append('BKM_Filtre')
+                
+                if durumlar:
+                    return '|'.join(durumlar)
+                else:
+                    return 'Normal'
+            
+            result['kpi_durum'] = result.apply(belirle_kpi_durum, axis=1)
+            
             final_columns = [
                 'magaza_kod', 'urun_kod', 'magaza_segment', 'urun_segment', 'durum',
-                'stok', 'yol', 'satis', 'ilk_nihai_cover', 'ihtiyac', 'sevkiyat_miktari', 
+                'stok', 'yol', 'satis', 'ilk_nihai_cover', 'ihtiyac', 'sevkiyat_miktari',
+                'paket_ici', 'sevkiyat_paket_adet',
                 'depo_kod', 'stok_yoklugu_satis_kaybi', 'kpi_min', 'kpi_max', 'kpi_forward_cover',
-                'ilk_depo_stok', 'son_nihai_stok', 'son_nihai_cover'
+                'ilk_depo_stok', 'son_nihai_stok', 'son_nihai_cover',
+                'aktif_nokta', 'kpi_durum'
             ]
             
             available_columns = [col for col in final_columns if col in result.columns]
@@ -1321,11 +1394,15 @@ elif menu == "📐 Hesaplama":
                 'ilk_depo_stok': 'Ilk_Depo_Stok',
                 'son_nihai_stok': 'Son_Nihai_Stok',
                 'son_nihai_cover': 'Son_Nihai_Cover',
-                'ilk_nihai_cover': 'Ilk_Nihai_Cover'
+                'ilk_nihai_cover': 'Ilk_Nihai_Cover',
+                'paket_ici': 'Paket_Ici',
+                'sevkiyat_paket_adet': 'Sevkiyat_Paket_Adet',
+                'aktif_nokta': 'Aktif_Nokta',
+                'kpi_durum': 'KPI_Durum'
             })
             
             # Integer dönüşüm
-            for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi', 'KPI_Min', 'KPI_Max', 'Ilk_Depo_Stok', 'Son_Nihai_Stok']:
+            for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'Paket_Ici', 'Sevkiyat_Paket_Adet', 'stok_yoklugu_satis_kaybi', 'KPI_Min', 'KPI_Max', 'Ilk_Depo_Stok', 'Son_Nihai_Stok', 'Aktif_Nokta']:
                 if col in final.columns:
                     final[col] = final[col].round().fillna(0).astype(int)
             

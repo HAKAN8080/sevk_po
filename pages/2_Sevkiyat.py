@@ -1508,45 +1508,6 @@ elif menu == "📐 Hesaplama":
             # Status'u güncelle
             status_text.success("✅ Hesaplama tamamlandı!")
             
-            st.markdown("---")
-            st.subheader("📥 Dışa Aktar")
-            col1, col2, col3 = st.columns([1, 1, 2])
-            
-            with col1:
-                sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
-                sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
-                
-                # Excel export
-                from io import BytesIO
-                sap_buffer = BytesIO()
-                sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
-                sap_buffer.seek(0)
-                
-                st.download_button(
-                    label="📥 SAP Dosyası İndir (Excel)",
-                    data=sap_buffer.getvalue(),
-                    file_name="sap_sevkiyat_detay.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="hesaplama_download_sap_excel"
-                )
-            
-            with col2:
-                # Tam detay Excel
-                full_buffer = BytesIO()
-                final.to_excel(full_buffer, index=False, engine='openpyxl')
-                full_buffer.seek(0)
-                
-                st.download_button(
-                    label="📥 Tam Detay İndir (Excel)",
-                    data=full_buffer.getvalue(),
-                    file_name="sevkiyat_tam_detay.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="hesaplama_download_full_excel"
-                )
-            
-            st.success("✅ Hesaplama tamamlandı! Raporlar menüsünden detaylı analizlere ulaşabilirsiniz.")
             
         except Exception as e:
             st.error(f"❌ Hesaplama hatası: {str(e)}")

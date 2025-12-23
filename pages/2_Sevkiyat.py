@@ -1291,8 +1291,13 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # PAKET BİLGİSİ EKLE (Ürün Master'dan)
             # ============================================
+            # Önce varsa eski paket_ici kolonlarını temizle
+            paket_cols_to_drop = [c for c in result.columns if 'paket_ici' in c.lower()]
+            if paket_cols_to_drop:
+                result = result.drop(columns=paket_cols_to_drop, errors='ignore')
+            
             if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
-                paket_master = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
+                paket_master = st.session_state.urun_master[['urun_kod', 'paket_ici']].drop_duplicates('urun_kod').copy()
                 paket_master['urun_kod'] = paket_master['urun_kod'].astype(str)
                 paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
                 paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1

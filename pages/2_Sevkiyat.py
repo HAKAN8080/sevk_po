@@ -840,6 +840,7 @@ elif menu == "📐 Hesaplama":
     # Hesapla Butonu
     if st.button("🚀 HESAPLA", type="primary", use_container_width=True):
         baslaangic_zamani = time.time()
+        hesaplama_basarili = False
         
         with st.spinner("Hesaplanıyor..."):
             try:
@@ -1487,50 +1488,57 @@ elif menu == "📐 Hesaplama":
                 kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
                 st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
                 
-                st.markdown("---")
-                
-                # İndirme butonları - EXCEL FORMATI
-                st.subheader("📥 Dışa Aktar")
-                col1, col2, col3 = st.columns([1, 1, 2])
-                
-                with col1:
-                    sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
-                    sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
-                    
-                    # Excel export
-                    from io import BytesIO
-                    sap_buffer = BytesIO()
-                    sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
-                    sap_buffer.seek(0)
-                    
-                    st.download_button(
-                        label="📥 SAP Dosyası İndir (Excel)",
-                        data=sap_buffer.getvalue(),
-                        file_name="sap_sevkiyat_detay.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key="hesaplama_download_sap_excel"
-                    )
-                
-                with col2:
-                    # Tam detay Excel
-                    full_buffer = BytesIO()
-                    final.to_excel(full_buffer, index=False, engine='openpyxl')
-                    full_buffer.seek(0)
-                    
-                    st.download_button(
-                        label="📥 Tam Detay İndir (Excel)",
-                        data=full_buffer.getvalue(),
-                        file_name="sevkiyat_tam_detay.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key="hesaplama_download_full_excel"
-                    )
+                # Hesaplama başarılı flag
+                hesaplama_basarili = True
                 
             except Exception as e:
                 st.error(f"❌ Hesaplama hatası: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
+        
+        # SPINNER DIŞINDA - İndirme butonları
+        if hesaplama_basarili and st.session_state.sevkiyat_sonuc is not None:
+            st.markdown("---")
+            st.subheader("📥 Dışa Aktar")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            
+            final_export = st.session_state.sevkiyat_sonuc.copy()
+            
+            with col1:
+                sap_data = final_export[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
+                sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
+                
+                # Excel export
+                from io import BytesIO
+                sap_buffer = BytesIO()
+                sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
+                sap_buffer.seek(0)
+                
+                st.download_button(
+                    label="📥 SAP Dosyası İndir (Excel)",
+                    data=sap_buffer.getvalue(),
+                    file_name="sap_sevkiyat_detay.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="hesaplama_download_sap_excel"
+                )
+            
+            with col2:
+                # Tam detay Excel
+                full_buffer = BytesIO()
+                final_export.to_excel(full_buffer, index=False, engine='openpyxl')
+                full_buffer.seek(0)
+                
+                st.download_button(
+                    label="📥 Tam Detay İndir (Excel)",
+                    data=full_buffer.getvalue(),
+                    file_name="sevkiyat_tam_detay.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="hesaplama_download_full_excel"
+                )
+            
+            st.success("✅ Hesaplama tamamlandı! Raporlar menüsünden detaylı analizlere ulaşabilirsiniz.")
 
 
 # ============================================

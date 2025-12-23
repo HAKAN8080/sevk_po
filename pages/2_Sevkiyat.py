@@ -1441,15 +1441,18 @@ elif menu == "📐 Hesaplama":
                 # KPI hesaplamaları için orijinal veriden hesapla
                 orijinal_df = st.session_state.anlik_stok_satis.copy()
                 
-                # Cover hesapla
-                orijinal_df['cover'] = np.where(
-                    orijinal_df['satis'] > 0,
-                    (orijinal_df['stok'] + orijinal_df['yol']) / orijinal_df['satis'],
+                # SADECE AKTİF NOKTALAR (stok > 0 OR satış > 0 OR yol > 0)
+                aktif_df = orijinal_df[(orijinal_df['stok'] > 0) | (orijinal_df['satis'] > 0) | (orijinal_df['yol'] > 0)].copy()
+                
+                # Cover hesapla (aktif noktalar için)
+                aktif_df['cover'] = np.where(
+                    aktif_df['satis'] > 0,
+                    (aktif_df['stok'] + aktif_df['yol']) / aktif_df['satis'],
                     0
                 )
                 
-                # KPI metrikleri hesapla
-                toplam_nokta_satisi = len(orijinal_df[(orijinal_df['stok'] > 0) | (orijinal_df['satis'] > 0) | (orijinal_df['yol'] > 0)])
+                # Toplam aktif nokta sayısı
+                toplam_nokta_satisi = len(aktif_df)
                 
                 # Min/max kontrolü için KPI'dan değerleri al
                 if st.session_state.kpi is not None and not st.session_state.kpi.empty:
@@ -1459,10 +1462,11 @@ elif menu == "📐 Hesaplama":
                     avg_min = 0
                     avg_max = 999999
                 
-                min_alti_stok = len(orijinal_df[(orijinal_df['stok'] + orijinal_df['yol']) < avg_min])
-                maks_ustu_stok = len(orijinal_df[(orijinal_df['stok'] + orijinal_df['yol']) > avg_max])
-                cover_12_ustu = len(orijinal_df[orijinal_df['cover'] > 12])
-                cover_4_alti = len(orijinal_df[(orijinal_df['cover'] < 4) & (orijinal_df['cover'] > 0)])
+                # TÜM KPI METRİKLERİ AKTİF NOKTALARDAN HESAPLANIYOR
+                min_alti_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) < avg_min])
+                maks_ustu_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) > avg_max])
+                cover_12_ustu = len(aktif_df[aktif_df['cover'] > 12])
+                cover_4_alti = len(aktif_df[(aktif_df['cover'] < 4) & (aktif_df['cover'] > 0)])
                 ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
                 brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
                 
@@ -1492,7 +1496,7 @@ elif menu == "📐 Hesaplama":
                         f"{cover_12_ustu/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
                         f"{cover_4_alti/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
                         f"{ihtiyac_100_sevk_0/len(final)*100:.1f}%" if len(final) > 0 else "0%",
-                        f"{brut_marj_filtre/len(orijinal_df)*100:.1f}%" if len(orijinal_df) > 0 else "0%"
+                        f"{brut_marj_filtre/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%"
                     ]
                 }
                 

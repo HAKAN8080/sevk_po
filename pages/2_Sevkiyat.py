@@ -1,4 +1,4 @@
-import streamlit as st
+-import streamlit as st
 import pandas as pd
 import time
 import numpy as np
@@ -840,672 +840,664 @@ elif menu == "📐 Hesaplama":
     # Hesapla Butonu
     if st.button("🚀 HESAPLA", type="primary", use_container_width=True):
         baslaangic_zamani = time.time()
-        hesaplama_basarili = False
         
-        with st.spinner("Hesaplanıyor..."):
-            try:
-                # ============================================
-                # 1. VERİ HAZIRLA
-                # ============================================
-                st.info("📂 Veriler hazırlanıyor...")
+        try:
+            # ============================================
+            # 1. VERİ HAZIRLA
+            # ============================================
+            status_text = st.empty()
+            status_text.info("📂 Veriler hazırlanıyor...")
+            
+            df = st.session_state.anlik_stok_satis.copy()
+            df['urun_kod'] = df['urun_kod'].astype(str)
+            df['magaza_kod'] = df['magaza_kod'].astype(str)
+            
+            depo_df = st.session_state.depo_stok.copy()
+            depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
+            depo_df['depo_kod'] = depo_df['depo_kod'].astype(int)
+            
+            magaza_df = st.session_state.magaza_master.copy()
+            magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
+            
+            kpi_df = st.session_state.kpi.copy()
+            
+            st.write(f"✅ Anlık stok/satış: {len(df):,} satır")
+            st.write(f"✅ Depo stok: {len(depo_df):,} satır")
+            
+            # ============================================
+            # 1.5 BRÜT KAR MARJI HESAPLA VE FİLTRELE
+            # ============================================
+            brut_kar_filtre_sayisi = 0
+            
+            if brut_kar_aktif and brut_kar_siniri > 0:
+                st.info(f"💰 Brüt kar marjı filtresi uygulanıyor (Min: %{brut_kar_siniri:.0f})...")
                 
-                df = st.session_state.anlik_stok_satis.copy()
-                df['urun_kod'] = df['urun_kod'].astype(str)
-                df['magaza_kod'] = df['magaza_kod'].astype(str)
-                
-                depo_df = st.session_state.depo_stok.copy()
-                depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
-                depo_df['depo_kod'] = depo_df['depo_kod'].astype(int)
-                
-                magaza_df = st.session_state.magaza_master.copy()
-                magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
-                
-                kpi_df = st.session_state.kpi.copy()
-                
-                st.write(f"✅ Anlık stok/satış: {len(df):,} satır")
-                st.write(f"✅ Depo stok: {len(depo_df):,} satır")
-                
-                # ============================================
-                # 1.5 BRÜT KAR MARJI HESAPLA VE FİLTRELE
-                # ============================================
-                brut_kar_filtre_sayisi = 0
-                
-                if brut_kar_aktif and brut_kar_siniri > 0:
-                    st.info(f"💰 Brüt kar marjı filtresi uygulanıyor (Min: %{brut_kar_siniri:.0f})...")
-                    
-                    # BKM hesapla: (ciro - smm*satis) / ciro * 100 veya direkt smm/satis
-                    # smm = satılan malın maliyeti (toplam), ciro = satış hasılatı
-                    if 'smm' in df.columns and 'ciro' in df.columns:
-                        # BKM% = (Ciro - SMM) / Ciro * 100
-                        df['brut_kar_marji'] = np.where(
-                            df['ciro'] > 0,
-                            ((df['ciro'] - df['smm']) / df['ciro']) * 100,
-                            0
-                        )
-                    elif 'smm' in df.columns and 'satis' in df.columns:
-                        # Alternatif: smm zaten oran olarak geliyorsa
-                        df['brut_kar_marji'] = 100 - (df['smm'] * 100)
-                    else:
-                        df['brut_kar_marji'] = 100  # SMM yoksa hepsini dahil et
-                    
-                    # Filtreleme öncesi say
-                    onceki_satir = len(df)
-                    
-                    # BKM sınırının altındakileri işaretle (ihtiyaç hesaplanmayacak)
-                    df['brut_kar_filtreli'] = df['brut_kar_marji'] < brut_kar_siniri
-                    brut_kar_filtre_sayisi = df['brut_kar_filtreli'].sum()
-                    
-                    st.write(f"⚠️ BKM < %{brut_kar_siniri:.0f} olan {brut_kar_filtre_sayisi:,} satır ihtiyaç hesaplamasından çıkarılacak")
+                # BKM hesapla: (ciro - smm*satis) / ciro * 100 veya direkt smm/satis
+                # smm = satılan malın maliyeti (toplam), ciro = satış hasılatı
+                if 'smm' in df.columns and 'ciro' in df.columns:
+                    # BKM% = (Ciro - SMM) / Ciro * 100
+                    df['brut_kar_marji'] = np.where(
+                        df['ciro'] > 0,
+                        ((df['ciro'] - df['smm']) / df['ciro']) * 100,
+                        0
+                    )
+                elif 'smm' in df.columns and 'satis' in df.columns:
+                    # Alternatif: smm zaten oran olarak geliyorsa
+                    df['brut_kar_marji'] = 100 - (df['smm'] * 100)
                 else:
-                    df['brut_kar_filtreli'] = False
-                    df['brut_kar_marji'] = 100
+                    df['brut_kar_marji'] = 100  # SMM yoksa hepsini dahil et
                 
-                # ============================================
-                # 1.6 PAKET İÇİ BİLGİSİ EKLE
-                # ============================================
-                if paket_sevk_aktif:
-                    st.info("📦 Paket bilgileri ekleniyor...")
+                # Filtreleme öncesi say
+                onceki_satir = len(df)
+                
+                # BKM sınırının altındakileri işaretle (ihtiyaç hesaplanmayacak)
+                df['brut_kar_filtreli'] = df['brut_kar_marji'] < brut_kar_siniri
+                brut_kar_filtre_sayisi = df['brut_kar_filtreli'].sum()
+                
+                st.write(f"⚠️ BKM < %{brut_kar_siniri:.0f} olan {brut_kar_filtre_sayisi:,} satır ihtiyaç hesaplamasından çıkarılacak")
+            else:
+                df['brut_kar_filtreli'] = False
+                df['brut_kar_marji'] = 100
+            
+            # ============================================
+            # 1.6 PAKET İÇİ BİLGİSİ EKLE
+            # ============================================
+            if paket_sevk_aktif:
+                st.info("📦 Paket bilgileri ekleniyor...")
+                
+                if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
+                    paket_info = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
+                    paket_info['urun_kod'] = paket_info['urun_kod'].astype(str)
+                    paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
+                    paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
                     
-                    if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
-                        paket_info = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
-                        paket_info['urun_kod'] = paket_info['urun_kod'].astype(str)
-                        paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
-                        paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
-                        
-                        df = df.merge(paket_info, on='urun_kod', how='left')
-                        df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
-                        
-                        st.write(f"✅ Paket bilgisi eklendi. Ortalama paket içi: {df['paket_ici'].mean():.1f}")
-                    else:
-                        df['paket_ici'] = 1
-                        st.warning("⚠️ Ürün master'da paket_ici kolonu yok, varsayılan 1 kullanılıyor")
+                    df = df.merge(paket_info, on='urun_kod', how='left')
+                    df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
+                    
+                    st.write(f"✅ Paket bilgisi eklendi. Ortalama paket içi: {df['paket_ici'].mean():.1f}")
                 else:
                     df['paket_ici'] = 1
-                
-                # ============================================
-                # 2. YENİ ÜRÜNLER
-                # ============================================
-                depo_sum = depo_df.groupby('urun_kod')['stok'].sum()
-                yeni_adaylar = depo_sum[depo_sum > 300].index.tolist()
-                
-                urun_magaza_count = df[df['urun_kod'].isin(yeni_adaylar)].groupby('urun_kod')['magaza_kod'].nunique()
-                total_magaza = df['magaza_kod'].nunique()
-                yeni_urunler = urun_magaza_count[urun_magaza_count < total_magaza * 0.5].index.tolist()
-                
-                st.write(f"✅ Yeni ürün adayı: {len(yeni_urunler):,}")
+                    st.warning("⚠️ Ürün master'da paket_ici kolonu yok, varsayılan 1 kullanılıyor")
+            else:
+                df['paket_ici'] = 1
+            
+            # ============================================
+            # 2. YENİ ÜRÜNLER
+            # ============================================
+            depo_sum = depo_df.groupby('urun_kod')['stok'].sum()
+            yeni_adaylar = depo_sum[depo_sum > 300].index.tolist()
+            
+            urun_magaza_count = df[df['urun_kod'].isin(yeni_adaylar)].groupby('urun_kod')['magaza_kod'].nunique()
+            total_magaza = df['magaza_kod'].nunique()
+            yeni_urunler = urun_magaza_count[urun_magaza_count < total_magaza * 0.5].index.tolist()
+            
+            st.write(f"✅ Yeni ürün adayı: {len(yeni_urunler):,}")
 
 
 
-                # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
-                if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
-                    # Tüm key'leri string'e çevir ve strip uygula
-                    urun_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.urun_segment_map.items()}
-                    magaza_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.magaza_segment_map.items()}
-                    
-                    # df'deki kodları da string'e çevir ve strip uygula
-                    df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
-                    df['magaza_kod'] = df['magaza_kod'].astype(str).str.strip()
-                    
-                    df['urun_segment'] = df['urun_kod'].map(urun_seg_map_str)
-                    df['magaza_segment'] = df['magaza_kod'].map(magaza_seg_map_str)
-                    
-                    # Eşleşme istatistikleri
-                    urun_eslesen = df['urun_segment'].notna().sum()
-                    magaza_eslesen = df['magaza_segment'].notna().sum()
-                    
-                    st.info(f"📊 Segment eşleşme: Ürün {urun_eslesen:,}/{len(df):,} ({urun_eslesen/len(df)*100:.1f}%) | Mağaza {magaza_eslesen:,}/{len(df):,} ({magaza_eslesen/len(df)*100:.1f}%)")
-                    
-                    # Debug bilgisi - eşleşme düşükse
-                    if urun_eslesen < len(df) * 0.5:
-                        st.warning(f"⚠️ Ürün eşleşme düşük! Map'te {len(urun_seg_map_str)} ürün var, df'te {df['urun_kod'].nunique()} unique ürün var.")
-                        with st.expander("🔍 Debug: İlk 5 ürün kodu karşılaştırması"):
-                            df_ornekler = df['urun_kod'].head(5).tolist()
-                            map_ornekler = list(urun_seg_map_str.keys())[:5]
-                            st.write(f"DF'teki örnekler: {df_ornekler}")
-                            st.write(f"Map'teki örnekler: {map_ornekler}")
-                    
-                    # NaN'ları default değerle doldur
-                    df['urun_segment'] = df['urun_segment'].fillna('Seg_20-inf')
-                    df['magaza_segment'] = df['magaza_segment'].fillna('Seg_20-inf')
+            # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
+            if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
+                # Tüm key'leri string'e çevir ve strip uygula
+                urun_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.urun_segment_map.items()}
+                magaza_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.magaza_segment_map.items()}
+                
+                # df'deki kodları da string'e çevir ve strip uygula
+                df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
+                df['magaza_kod'] = df['magaza_kod'].astype(str).str.strip()
+                
+                df['urun_segment'] = df['urun_kod'].map(urun_seg_map_str)
+                df['magaza_segment'] = df['magaza_kod'].map(magaza_seg_map_str)
+                
+                # Eşleşme istatistikleri
+                urun_eslesen = df['urun_segment'].notna().sum()
+                magaza_eslesen = df['magaza_segment'].notna().sum()
+                
+                st.info(f"📊 Segment eşleşme: Ürün {urun_eslesen:,}/{len(df):,} ({urun_eslesen/len(df)*100:.1f}%) | Mağaza {magaza_eslesen:,}/{len(df):,} ({magaza_eslesen/len(df)*100:.1f}%)")
+                
+                # Debug bilgisi - eşleşme düşükse
+                if urun_eslesen < len(df) * 0.5:
+                    st.warning(f"⚠️ Ürün eşleşme düşük! Map'te {len(urun_seg_map_str)} ürün var, df'te {df['urun_kod'].nunique()} unique ürün var.")
+                    with st.expander("🔍 Debug: İlk 5 ürün kodu karşılaştırması"):
+                        df_ornekler = df['urun_kod'].head(5).tolist()
+                        map_ornekler = list(urun_seg_map_str.keys())[:5]
+                        st.write(f"DF'teki örnekler: {df_ornekler}")
+                        st.write(f"Map'teki örnekler: {map_ornekler}")
+                
+                # NaN'ları default değerle doldur
+                df['urun_segment'] = df['urun_segment'].fillna('Seg_20-inf')
+                df['magaza_segment'] = df['magaza_segment'].fillna('Seg_20-inf')
+            else:
+                df['urun_segment'] = 'Seg_20-inf'
+                df['magaza_segment'] = 'Seg_20-inf'
+                st.warning("⚠️ Segment map bulunamadı, default 'Seg_20-inf' kullanılıyor")
+
+            
+            # ============================================
+            # 4. KPI VE MG BİLGİLERİ
+            # ============================================
+            default_fc = kpi_df['forward_cover'].mean() if 'forward_cover' in kpi_df.columns else 7.0
+            
+            df['min_deger'] = 0.0
+            df['max_deger'] = 999999.0
+            
+            # MG bilgisi ekle
+            if st.session_state.urun_master is not None and 'mg' in st.session_state.urun_master.columns:
+                urun_m = st.session_state.urun_master[['urun_kod', 'mg']].copy()
+                urun_m['urun_kod'] = urun_m['urun_kod'].astype(str)
+                urun_m['mg'] = urun_m['mg'].fillna('0').astype(str)
+                df = df.merge(urun_m, on='urun_kod', how='left')
+                df['mg'] = df['mg'].fillna('0')
+            else:
+                df['mg'] = '0'
+            
+            # KPI değerlerini uygula
+            if not kpi_df.empty and 'mg_id' in kpi_df.columns:
+                kpi_lookup = {}
+                for _, row in kpi_df.iterrows():
+                    mg_key = str(row['mg_id'])
+                    kpi_lookup[mg_key] = {
+                        'min': float(row.get('min_deger', 0)) if pd.notna(row.get('min_deger', 0)) else 0,
+                        'max': float(row.get('max_deger', 999999)) if pd.notna(row.get('max_deger', 999999)) else 999999
+                    }
+                
+                for mg_val in df['mg'].unique():
+                    if mg_val in kpi_lookup:
+                        mask = df['mg'] == mg_val
+                        df.loc[mask, 'min_deger'] = kpi_lookup[mg_val]['min']
+                        df.loc[mask, 'max_deger'] = kpi_lookup[mg_val]['max']
+            
+            # ============================================
+            # 5. DEPO KODU EKLEMESİ
+            # ============================================
+            if 'depo_kod' in magaza_df.columns:
+                df = df.merge(magaza_df[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
+                df['depo_kod'] = df['depo_kod'].fillna(0).astype(int)
+                df['depo_kod'] = df['depo_kod'].replace(0, 1)
+            else:
+                df['depo_kod'] = 1
+            
+            st.write(f"✅ Depo kodları eklendi")
+            
+            # ============================================
+            # 6. MATRİS DEĞERLERİ
+            # ============================================
+            df['genlestirme'] = 1.0
+            df['sisme'] = 0.5
+            df['min_oran'] = 1.0
+            df['initial_katsayi'] = 1.0
+            
+            all_matrices_exist = all([
+                st.session_state.genlestirme_orani is not None,
+                st.session_state.sisme_orani is not None,
+                st.session_state.min_oran is not None,
+                st.session_state.initial_matris is not None
+            ])
+            
+            if all_matrices_exist:
+                st.info("🔄 Matris değerleri uygulanıyor...")
+                
+                # Genleştirme
+                genles_long = st.session_state.genlestirme_orani.stack().reset_index()
+                genles_long.columns = ['magaza_segment', 'urun_segment', 'genlestirme_mat']
+                genles_long['magaza_segment'] = genles_long['magaza_segment'].astype(str)
+                genles_long['urun_segment'] = genles_long['urun_segment'].astype(str)
+                df = df.merge(genles_long, on=['magaza_segment', 'urun_segment'], how='left')
+                df['genlestirme'] = df['genlestirme_mat'].fillna(df['genlestirme'])
+                df.drop('genlestirme_mat', axis=1, inplace=True)
+                
+                # Şişme
+                sisme_long = st.session_state.sisme_orani.stack().reset_index()
+                sisme_long.columns = ['magaza_segment', 'urun_segment', 'sisme_mat']
+                sisme_long['magaza_segment'] = sisme_long['magaza_segment'].astype(str)
+                sisme_long['urun_segment'] = sisme_long['urun_segment'].astype(str)
+                df = df.merge(sisme_long, on=['magaza_segment', 'urun_segment'], how='left')
+                df['sisme'] = df['sisme_mat'].fillna(df['sisme'])
+                df.drop('sisme_mat', axis=1, inplace=True)
+                
+                # Min Oran
+                min_long = st.session_state.min_oran.stack().reset_index()
+                min_long.columns = ['magaza_segment', 'urun_segment', 'min_oran_mat']
+                min_long['magaza_segment'] = min_long['magaza_segment'].astype(str)
+                min_long['urun_segment'] = min_long['urun_segment'].astype(str)
+                df = df.merge(min_long, on=['magaza_segment', 'urun_segment'], how='left')
+                df['min_oran'] = df['min_oran_mat'].fillna(df['min_oran'])
+                df.drop('min_oran_mat', axis=1, inplace=True)
+                
+                # Initial
+                initial_long = st.session_state.initial_matris.stack().reset_index()
+                initial_long.columns = ['magaza_segment', 'urun_segment', 'initial_mat']
+                initial_long['magaza_segment'] = initial_long['magaza_segment'].astype(str)
+                initial_long['urun_segment'] = initial_long['urun_segment'].astype(str)
+                df = df.merge(initial_long, on=['magaza_segment', 'urun_segment'], how='left')
+                df['initial_katsayi'] = df['initial_mat'].fillna(df['initial_katsayi'])
+                df.drop('initial_mat', axis=1, inplace=True)
+                
+                st.success("✅ Matris değerleri uygulandı!")
+            
+            # ============================================
+            # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI ✅
+            # ============================================
+            st.info("📊 İhtiyaçlar hesaplanıyor (MAX yaklaşımı)...")
+            
+            # Her ürün-mağaza için 3 farklı ihtiyaç hesapla
+            df['rpt_ihtiyac'] = (
+                default_fc * df['satis'] * df['genlestirme']
+            ) - (df['stok'] + df['yol'])
+            
+            df['min_ihtiyac'] = (
+                df['min_oran'] * df['min_deger']
+            ) - (df['stok'] + df['yol'])
+            
+            # Initial ihtiyacı (sadece yeni ürünler için)
+            df['initial_ihtiyac'] = 0.0
+            if yeni_urunler:
+                yeni_mask = df['urun_kod'].isin(yeni_urunler)
+                df.loc[yeni_mask, 'initial_ihtiyac'] = (
+                    df.loc[yeni_mask, 'min_deger'] * df.loc[yeni_mask, 'initial_katsayi']
+                ) - (df.loc[yeni_mask, 'stok'] + df.loc[yeni_mask, 'yol'])
+            
+            # Negatif değerleri sıfırla
+            df['rpt_ihtiyac'] = df['rpt_ihtiyac'].clip(lower=0)
+            df['min_ihtiyac'] = df['min_ihtiyac'].clip(lower=0)
+            df['initial_ihtiyac'] = df['initial_ihtiyac'].clip(lower=0)
+            
+            # ✅ MAX'I AL - TEK İHTİYAÇ
+            df['ihtiyac'] = df[['rpt_ihtiyac', 'min_ihtiyac', 'initial_ihtiyac']].max(axis=1)
+            
+            # ============================================
+            # 7.5 BRÜT KAR FİLTRESİ UYGULA
+            # ============================================
+            if brut_kar_aktif and brut_kar_siniri > 0:
+                # BKM sınırının altındaki ürünlerin ihtiyacını sıfırla
+                df.loc[df['brut_kar_filtreli'] == True, 'ihtiyac'] = 0
+                st.write(f"💰 BKM filtresi uygulandı: {brut_kar_filtre_sayisi:,} satırın ihtiyacı sıfırlandı")
+            
+            # Hangi türden geldiğini belirle
+            def belirle_durum(row):
+                if row['ihtiyac'] == 0:
+                    if row.get('brut_kar_filtreli', False):
+                        return 'BKM_Filtre'
+                    return 'Yok'
+                if row['ihtiyac'] == row['rpt_ihtiyac']:
+                    return 'RPT'
+                elif row['ihtiyac'] == row['initial_ihtiyac'] and row['initial_ihtiyac'] > 0:
+                    return 'Initial'
+                elif row['ihtiyac'] == row['min_ihtiyac']:
+                    return 'Min'
                 else:
-                    df['urun_segment'] = 'Seg_20-inf'
-                    df['magaza_segment'] = 'Seg_20-inf'
-                    st.warning("⚠️ Segment map bulunamadı, default 'Seg_20-inf' kullanılıyor")
-
+                    return 'RPT'
+            
+            df['durum'] = df.apply(belirle_durum, axis=1)
+            
+            st.success(f"✅ İhtiyaçlar hesaplandı (MAX yaklaşımı)")
+            
+                         
+            # ============================================
+            # 8. YASAK KONTROL
+            # ============================================
+            if (st.session_state.yasak_master is not None and 
+                'urun_kod' in st.session_state.yasak_master.columns and
+                'magaza_kod' in st.session_state.yasak_master.columns):
                 
-                # ============================================
-                # 4. KPI VE MG BİLGİLERİ
-                # ============================================
-                default_fc = kpi_df['forward_cover'].mean() if 'forward_cover' in kpi_df.columns else 7.0
+                yasak = st.session_state.yasak_master.copy()
+                yasak['urun_kod'] = yasak['urun_kod'].astype(str)
+                yasak['magaza_kod'] = yasak['magaza_kod'].astype(str)
                 
-                df['min_deger'] = 0.0
-                df['max_deger'] = 999999.0
+                if 'yasak_durum' in yasak.columns:
+                    df = df.merge(
+                        yasak[['urun_kod', 'magaza_kod', 'yasak_durum']], 
+                        on=['urun_kod', 'magaza_kod'], how='left'
+                    )
+                    df.loc[df['yasak_durum'] == 'Yasak', 'ihtiyac'] = 0
+                    df.drop('yasak_durum', axis=1, inplace=True, errors='ignore')
+            
+            # ============================================
+            # 9. DEPO STOK DAĞITIMI
+            # ============================================
+            st.info("🚀 Depo stok dağıtımı yapılıyor...")
+            
+            # Sadece pozitif ihtiyaçları al
+            result = df[df['ihtiyac'] > 0].copy()
+            st.write(f"Pozitif ihtiyaç sayısı: {len(result):,}")
+            
+            if len(result) == 0:
+                st.warning("⚠️ Hiç pozitif ihtiyaç bulunamadı!")
+                st.stop()
+            
+            # Öncelik sıralaması
+            durum_priority = {'RPT': 1, 'Initial': 2, 'Min': 3}
+            result['durum_oncelik'] = result['durum'].map(durum_priority).fillna(4)
+            result = result.sort_values(['durum_oncelik', 'ihtiyac'], ascending=[True, False])
+            result = result.reset_index(drop=True)
+            
+            # Depo stok dictionary oluştur
+            depo_stok_dict = {}
+            for _, row in depo_df.iterrows():
+                key = (int(row['depo_kod']), str(row['urun_kod']))
+                depo_stok_dict[key] = float(row['stok'])
+            
+            # NumPy array'lerle çalış
+            depo_kodlar = result['depo_kod'].values.astype(int)
+            urun_kodlar = result['urun_kod'].values.astype(str)
+            ihtiyaclar = result['ihtiyac'].values.astype(float)
+            paket_icileri = result['paket_ici'].values.astype(int) if 'paket_ici' in result.columns else np.ones(len(result), dtype=int)
+            sisme_oranlari = result['sisme'].values.astype(float) if 'sisme' in result.columns else np.full(len(result), 0.5)
+            
+            sevkiyat_array = np.zeros(len(result), dtype=float)
+            paket_sevk_flag = np.zeros(len(result), dtype=int)  # Paket sevkiyatı uygulandı mı
+            
+            # Tek döngü
+            progress_bar = st.progress(0)
+            total_rows = len(result)
+            
+            for idx in range(total_rows):
+                key = (depo_kodlar[idx], urun_kodlar[idx])
+                ihtiyac = ihtiyaclar[idx]
+                paket_ici = paket_icileri[idx]
+                sisme_orani = sisme_oranlari[idx]
                 
-                # MG bilgisi ekle
-                if st.session_state.urun_master is not None and 'mg' in st.session_state.urun_master.columns:
-                    urun_m = st.session_state.urun_master[['urun_kod', 'mg']].copy()
-                    urun_m['urun_kod'] = urun_m['urun_kod'].astype(str)
-                    urun_m['mg'] = urun_m['mg'].fillna('0').astype(str)
-                    df = df.merge(urun_m, on='urun_kod', how='left')
-                    df['mg'] = df['mg'].fillna('0')
-                else:
-                    df['mg'] = '0'
-                
-                # KPI değerlerini uygula
-                if not kpi_df.empty and 'mg_id' in kpi_df.columns:
-                    kpi_lookup = {}
-                    for _, row in kpi_df.iterrows():
-                        mg_key = str(row['mg_id'])
-                        kpi_lookup[mg_key] = {
-                            'min': float(row.get('min_deger', 0)) if pd.notna(row.get('min_deger', 0)) else 0,
-                            'max': float(row.get('max_deger', 999999)) if pd.notna(row.get('max_deger', 999999)) else 999999
-                        }
+                if key in depo_stok_dict and depo_stok_dict[key] > 0:
+                    mevcut_stok = depo_stok_dict[key]
                     
-                    for mg_val in df['mg'].unique():
-                        if mg_val in kpi_lookup:
-                            mask = df['mg'] == mg_val
-                            df.loc[mask, 'min_deger'] = kpi_lookup[mg_val]['min']
-                            df.loc[mask, 'max_deger'] = kpi_lookup[mg_val]['max']
-                
-                # ============================================
-                # 5. DEPO KODU EKLEMESİ
-                # ============================================
-                if 'depo_kod' in magaza_df.columns:
-                    df = df.merge(magaza_df[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
-                    df['depo_kod'] = df['depo_kod'].fillna(0).astype(int)
-                    df['depo_kod'] = df['depo_kod'].replace(0, 1)
-                else:
-                    df['depo_kod'] = 1
-                
-                st.write(f"✅ Depo kodları eklendi")
-                
-                # ============================================
-                # 6. MATRİS DEĞERLERİ
-                # ============================================
-                df['genlestirme'] = 1.0
-                df['sisme'] = 0.5
-                df['min_oran'] = 1.0
-                df['initial_katsayi'] = 1.0
-                
-                all_matrices_exist = all([
-                    st.session_state.genlestirme_orani is not None,
-                    st.session_state.sisme_orani is not None,
-                    st.session_state.min_oran is not None,
-                    st.session_state.initial_matris is not None
-                ])
-                
-                if all_matrices_exist:
-                    st.info("🔄 Matris değerleri uygulanıyor...")
-                    
-                    # Genleştirme
-                    genles_long = st.session_state.genlestirme_orani.stack().reset_index()
-                    genles_long.columns = ['magaza_segment', 'urun_segment', 'genlestirme_mat']
-                    genles_long['magaza_segment'] = genles_long['magaza_segment'].astype(str)
-                    genles_long['urun_segment'] = genles_long['urun_segment'].astype(str)
-                    df = df.merge(genles_long, on=['magaza_segment', 'urun_segment'], how='left')
-                    df['genlestirme'] = df['genlestirme_mat'].fillna(df['genlestirme'])
-                    df.drop('genlestirme_mat', axis=1, inplace=True)
-                    
-                    # Şişme
-                    sisme_long = st.session_state.sisme_orani.stack().reset_index()
-                    sisme_long.columns = ['magaza_segment', 'urun_segment', 'sisme_mat']
-                    sisme_long['magaza_segment'] = sisme_long['magaza_segment'].astype(str)
-                    sisme_long['urun_segment'] = sisme_long['urun_segment'].astype(str)
-                    df = df.merge(sisme_long, on=['magaza_segment', 'urun_segment'], how='left')
-                    df['sisme'] = df['sisme_mat'].fillna(df['sisme'])
-                    df.drop('sisme_mat', axis=1, inplace=True)
-                    
-                    # Min Oran
-                    min_long = st.session_state.min_oran.stack().reset_index()
-                    min_long.columns = ['magaza_segment', 'urun_segment', 'min_oran_mat']
-                    min_long['magaza_segment'] = min_long['magaza_segment'].astype(str)
-                    min_long['urun_segment'] = min_long['urun_segment'].astype(str)
-                    df = df.merge(min_long, on=['magaza_segment', 'urun_segment'], how='left')
-                    df['min_oran'] = df['min_oran_mat'].fillna(df['min_oran'])
-                    df.drop('min_oran_mat', axis=1, inplace=True)
-                    
-                    # Initial
-                    initial_long = st.session_state.initial_matris.stack().reset_index()
-                    initial_long.columns = ['magaza_segment', 'urun_segment', 'initial_mat']
-                    initial_long['magaza_segment'] = initial_long['magaza_segment'].astype(str)
-                    initial_long['urun_segment'] = initial_long['urun_segment'].astype(str)
-                    df = df.merge(initial_long, on=['magaza_segment', 'urun_segment'], how='left')
-                    df['initial_katsayi'] = df['initial_mat'].fillna(df['initial_katsayi'])
-                    df.drop('initial_mat', axis=1, inplace=True)
-                    
-                    st.success("✅ Matris değerleri uygulandı!")
-                
-                # ============================================
-                # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI ✅
-                # ============================================
-                st.info("📊 İhtiyaçlar hesaplanıyor (MAX yaklaşımı)...")
-                
-                # Her ürün-mağaza için 3 farklı ihtiyaç hesapla
-                df['rpt_ihtiyac'] = (
-                    default_fc * df['satis'] * df['genlestirme']
-                ) - (df['stok'] + df['yol'])
-                
-                df['min_ihtiyac'] = (
-                    df['min_oran'] * df['min_deger']
-                ) - (df['stok'] + df['yol'])
-                
-                # Initial ihtiyacı (sadece yeni ürünler için)
-                df['initial_ihtiyac'] = 0.0
-                if yeni_urunler:
-                    yeni_mask = df['urun_kod'].isin(yeni_urunler)
-                    df.loc[yeni_mask, 'initial_ihtiyac'] = (
-                        df.loc[yeni_mask, 'min_deger'] * df.loc[yeni_mask, 'initial_katsayi']
-                    ) - (df.loc[yeni_mask, 'stok'] + df.loc[yeni_mask, 'yol'])
-                
-                # Negatif değerleri sıfırla
-                df['rpt_ihtiyac'] = df['rpt_ihtiyac'].clip(lower=0)
-                df['min_ihtiyac'] = df['min_ihtiyac'].clip(lower=0)
-                df['initial_ihtiyac'] = df['initial_ihtiyac'].clip(lower=0)
-                
-                # ✅ MAX'I AL - TEK İHTİYAÇ
-                df['ihtiyac'] = df[['rpt_ihtiyac', 'min_ihtiyac', 'initial_ihtiyac']].max(axis=1)
-                
-                # ============================================
-                # 7.5 BRÜT KAR FİLTRESİ UYGULA
-                # ============================================
-                if brut_kar_aktif and brut_kar_siniri > 0:
-                    # BKM sınırının altındaki ürünlerin ihtiyacını sıfırla
-                    df.loc[df['brut_kar_filtreli'] == True, 'ihtiyac'] = 0
-                    st.write(f"💰 BKM filtresi uygulandı: {brut_kar_filtre_sayisi:,} satırın ihtiyacı sıfırlandı")
-                
-                # Hangi türden geldiğini belirle
-                def belirle_durum(row):
-                    if row['ihtiyac'] == 0:
-                        if row.get('brut_kar_filtreli', False):
-                            return 'BKM_Filtre'
-                        return 'Yok'
-                    if row['ihtiyac'] == row['rpt_ihtiyac']:
-                        return 'RPT'
-                    elif row['ihtiyac'] == row['initial_ihtiyac'] and row['initial_ihtiyac'] > 0:
-                        return 'Initial'
-                    elif row['ihtiyac'] == row['min_ihtiyac']:
-                        return 'Min'
-                    else:
-                        return 'RPT'
-                
-                df['durum'] = df.apply(belirle_durum, axis=1)
-                
-                st.success(f"✅ İhtiyaçlar hesaplandı (MAX yaklaşımı)")
-                
-                             
-                # ============================================
-                # 8. YASAK KONTROL
-                # ============================================
-                if (st.session_state.yasak_master is not None and 
-                    'urun_kod' in st.session_state.yasak_master.columns and
-                    'magaza_kod' in st.session_state.yasak_master.columns):
-                    
-                    yasak = st.session_state.yasak_master.copy()
-                    yasak['urun_kod'] = yasak['urun_kod'].astype(str)
-                    yasak['magaza_kod'] = yasak['magaza_kod'].astype(str)
-                    
-                    if 'yasak_durum' in yasak.columns:
-                        df = df.merge(
-                            yasak[['urun_kod', 'magaza_kod', 'yasak_durum']], 
-                            on=['urun_kod', 'magaza_kod'], how='left'
-                        )
-                        df.loc[df['yasak_durum'] == 'Yasak', 'ihtiyac'] = 0
-                        df.drop('yasak_durum', axis=1, inplace=True, errors='ignore')
-                
-                # ============================================
-                # 9. DEPO STOK DAĞITIMI
-                # ============================================
-                st.info("🚀 Depo stok dağıtımı yapılıyor...")
-                
-                # Sadece pozitif ihtiyaçları al
-                result = df[df['ihtiyac'] > 0].copy()
-                st.write(f"Pozitif ihtiyaç sayısı: {len(result):,}")
-                
-                if len(result) == 0:
-                    st.warning("⚠️ Hiç pozitif ihtiyaç bulunamadı!")
-                    st.stop()
-                
-                # Öncelik sıralaması
-                durum_priority = {'RPT': 1, 'Initial': 2, 'Min': 3}
-                result['durum_oncelik'] = result['durum'].map(durum_priority).fillna(4)
-                result = result.sort_values(['durum_oncelik', 'ihtiyac'], ascending=[True, False])
-                result = result.reset_index(drop=True)
-                
-                # Depo stok dictionary oluştur
-                depo_stok_dict = {}
-                for _, row in depo_df.iterrows():
-                    key = (int(row['depo_kod']), str(row['urun_kod']))
-                    depo_stok_dict[key] = float(row['stok'])
-                
-                # NumPy array'lerle çalış
-                depo_kodlar = result['depo_kod'].values.astype(int)
-                urun_kodlar = result['urun_kod'].values.astype(str)
-                ihtiyaclar = result['ihtiyac'].values.astype(float)
-                paket_icileri = result['paket_ici'].values.astype(int) if 'paket_ici' in result.columns else np.ones(len(result), dtype=int)
-                sisme_oranlari = result['sisme'].values.astype(float) if 'sisme' in result.columns else np.full(len(result), 0.5)
-                
-                sevkiyat_array = np.zeros(len(result), dtype=float)
-                paket_sevk_flag = np.zeros(len(result), dtype=int)  # Paket sevkiyatı uygulandı mı
-                
-                # Tek döngü
-                progress_bar = st.progress(0)
-                total_rows = len(result)
-                
-                for idx in range(total_rows):
-                    key = (depo_kodlar[idx], urun_kodlar[idx])
-                    ihtiyac = ihtiyaclar[idx]
-                    paket_ici = paket_icileri[idx]
-                    sisme_orani = sisme_oranlari[idx]
-                    
-                    if key in depo_stok_dict and depo_stok_dict[key] > 0:
-                        mevcut_stok = depo_stok_dict[key]
+                    # ============================================
+                    # PAKET SEVKİYATI MANTIĞI
+                    # ============================================
+                    if paket_sevk_aktif and paket_ici > 1:
+                        # Yukarı yuvarlama dene
+                        paket_sayisi_yukari = int(np.ceil(ihtiyac / paket_ici))
+                        sevk_yukari = paket_sayisi_yukari * paket_ici
                         
-                        # ============================================
-                        # PAKET SEVKİYATI MANTIĞI
-                        # ============================================
-                        if paket_sevk_aktif and paket_ici > 1:
-                            # Yukarı yuvarlama dene
-                            paket_sayisi_yukari = int(np.ceil(ihtiyac / paket_ici))
-                            sevk_yukari = paket_sayisi_yukari * paket_ici
-                            
-                            # Aşağı yuvarlama
-                            paket_sayisi_asagi = int(np.floor(ihtiyac / paket_ici))
-                            sevk_asagi = paket_sayisi_asagi * paket_ici
-                            
-                            # Şişme kontrolü: (sevk - ihtiyac) / ihtiyac <= sisme_orani
-                            if ihtiyac > 0:
-                                sisme_yukari = (sevk_yukari - ihtiyac) / ihtiyac
-                            else:
-                                sisme_yukari = 1.0  # Çok büyük
-                            
-                            # Karar ver
-                            if sisme_yukari <= sisme_orani and sevk_yukari <= mevcut_stok:
-                                # Yukarı yuvarlama OK - şişme oranı uygun
-                                sevk = sevk_yukari
-                            elif sevk_asagi > 0 and sevk_asagi <= mevcut_stok:
-                                # Aşağı yuvarlama kullan
-                                sevk = sevk_asagi
-                            elif sevk_asagi == 0 and sevk_yukari <= mevcut_stok and sisme_yukari <= sisme_orani:
-                                # İhtiyaç çok düşük ama 1 paket gönder
-                                sevk = sevk_yukari
-                            else:
-                                # Stok yetersiz, mevcut stoğu paket katlarına yuvarla
-                                max_paket = int(np.floor(mevcut_stok / paket_ici))
-                                sevk = max_paket * paket_ici
-                            
-                            paket_sevk_flag[idx] = 1 if sevk > 0 else 0
+                        # Aşağı yuvarlama
+                        paket_sayisi_asagi = int(np.floor(ihtiyac / paket_ici))
+                        sevk_asagi = paket_sayisi_asagi * paket_ici
+                        
+                        # Şişme kontrolü: (sevk - ihtiyac) / ihtiyac <= sisme_orani
+                        if ihtiyac > 0:
+                            sisme_yukari = (sevk_yukari - ihtiyac) / ihtiyac
                         else:
-                            # Normal sevkiyat (paket yok)
-                            sevk = min(ihtiyac, mevcut_stok)
+                            sisme_yukari = 1.0  # Çok büyük
                         
-                        depo_stok_dict[key] -= sevk
-                        sevkiyat_array[idx] = sevk
+                        # Karar ver
+                        if sisme_yukari <= sisme_orani and sevk_yukari <= mevcut_stok:
+                            # Yukarı yuvarlama OK - şişme oranı uygun
+                            sevk = sevk_yukari
+                        elif sevk_asagi > 0 and sevk_asagi <= mevcut_stok:
+                            # Aşağı yuvarlama kullan
+                            sevk = sevk_asagi
+                        elif sevk_asagi == 0 and sevk_yukari <= mevcut_stok and sisme_yukari <= sisme_orani:
+                            # İhtiyaç çok düşük ama 1 paket gönder
+                            sevk = sevk_yukari
+                        else:
+                            # Stok yetersiz, mevcut stoğu paket katlarına yuvarla
+                            max_paket = int(np.floor(mevcut_stok / paket_ici))
+                            sevk = max_paket * paket_ici
+                        
+                        paket_sevk_flag[idx] = 1 if sevk > 0 else 0
+                    else:
+                        # Normal sevkiyat (paket yok)
+                        sevk = min(ihtiyac, mevcut_stok)
                     
-                    # Progress güncelle (her 10K'da bir)
-                    if idx % 10000 == 0:
-                        progress_bar.progress(idx / total_rows)
+                    depo_stok_dict[key] -= sevk
+                    sevkiyat_array[idx] = sevk
                 
-                progress_bar.progress(1.0)
-                
-                result['sevkiyat_miktari'] = sevkiyat_array
-                result['stok_yoklugu_satis_kaybi'] = result['ihtiyac'] - result['sevkiyat_miktari']
-                
-                if paket_sevk_aktif:
-                    result['paket_sevk_uygulandi'] = paket_sevk_flag
-                    paket_uygulanan = (paket_sevk_flag == 1).sum()
-                    st.write(f"📦 Paket sevkiyatı uygulanan satır: {paket_uygulanan:,}")
-                
-                # Temizlik
-                result.drop('durum_oncelik', axis=1, inplace=True, errors='ignore')
-                
-                st.success("✅ Depo stok dağıtımı tamamlandı!")
-                
-                # ============================================
-                # 10. SONUÇ HAZIRLA - GENİŞLETİLMİŞ KOLONLAR
-                # ============================================
-                
-                # Önce KPI'dan forward_cover, min, max değerlerini al
-                if not kpi_df.empty and 'mg_id' in kpi_df.columns:
-                    kpi_lookup_df = kpi_df.copy()
-                    kpi_lookup_df['mg_id'] = kpi_lookup_df['mg_id'].astype(str)
-                    result = result.merge(
-                        kpi_lookup_df[['mg_id', 'min_deger', 'max_deger', 'forward_cover']].rename(
-                            columns={'mg_id': 'mg', 'min_deger': 'kpi_min', 'max_deger': 'kpi_max', 'forward_cover': 'kpi_forward_cover'}
-                        ),
-                        on='mg', how='left'
-                    )
-                else:
-                    result['kpi_min'] = 0
-                    result['kpi_max'] = 999999
-                    result['kpi_forward_cover'] = default_fc
-                
-                # Depo stok bilgisini ekle
-                depo_stok_merge = depo_df.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
-                depo_stok_merge.columns = ['depo_kod', 'urun_kod', 'ilk_depo_stok']
-                depo_stok_merge['depo_kod'] = depo_stok_merge['depo_kod'].astype(int)
-                depo_stok_merge['urun_kod'] = depo_stok_merge['urun_kod'].astype(str)
-                result = result.merge(depo_stok_merge, on=['depo_kod', 'urun_kod'], how='left')
-                result['ilk_depo_stok'] = result['ilk_depo_stok'].fillna(0)
-                
-                # Hesaplanan kolonlar
-                result['ilk_nihai_cover'] = np.where(
-                    result['satis'] > 0,
-                    (result['stok'] + result['yol']) / result['satis'],
-                    0
-                ).round(2)
-                
-                result['son_nihai_stok'] = result['stok'] + result['yol'] + result['sevkiyat_miktari']
-                
-                result['son_nihai_cover'] = np.where(
-                    result['satis'] > 0,
-                    result['son_nihai_stok'] / result['satis'],
-                    0
-                ).round(2)
-                
-                final_columns = [
-                    'magaza_kod', 'urun_kod', 'magaza_segment', 'urun_segment', 'durum',
-                    'stok', 'yol', 'satis', 'ilk_nihai_cover', 'ihtiyac', 'sevkiyat_miktari', 
-                    'depo_kod', 'stok_yoklugu_satis_kaybi', 'kpi_min', 'kpi_max', 'kpi_forward_cover',
-                    'ilk_depo_stok', 'son_nihai_stok', 'son_nihai_cover'
+                # Progress güncelle (her 10K'da bir)
+                if idx % 10000 == 0:
+                    progress_bar.progress(idx / total_rows)
+            
+            progress_bar.progress(1.0)
+            time.sleep(0.5)  # Kısa bekle
+            progress_bar.empty()  # Progress bar'ı temizle
+            
+            result['sevkiyat_miktari'] = sevkiyat_array
+            result['stok_yoklugu_satis_kaybi'] = result['ihtiyac'] - result['sevkiyat_miktari']
+            
+            if paket_sevk_aktif:
+                result['paket_sevk_uygulandi'] = paket_sevk_flag
+                paket_uygulanan = (paket_sevk_flag == 1).sum()
+                st.write(f"📦 Paket sevkiyatı uygulanan satır: {paket_uygulanan:,}")
+            
+            # Temizlik
+            result.drop('durum_oncelik', axis=1, inplace=True, errors='ignore')
+            
+            st.success("✅ Depo stok dağıtımı tamamlandı!")
+            
+            # ============================================
+            # 10. SONUÇ HAZIRLA - GENİŞLETİLMİŞ KOLONLAR
+            # ============================================
+            
+            # Önce KPI'dan forward_cover, min, max değerlerini al
+            if not kpi_df.empty and 'mg_id' in kpi_df.columns:
+                kpi_lookup_df = kpi_df.copy()
+                kpi_lookup_df['mg_id'] = kpi_lookup_df['mg_id'].astype(str)
+                result = result.merge(
+                    kpi_lookup_df[['mg_id', 'min_deger', 'max_deger', 'forward_cover']].rename(
+                        columns={'mg_id': 'mg', 'min_deger': 'kpi_min', 'max_deger': 'kpi_max', 'forward_cover': 'kpi_forward_cover'}
+                    ),
+                    on='mg', how='left'
+                )
+            else:
+                result['kpi_min'] = 0
+                result['kpi_max'] = 999999
+                result['kpi_forward_cover'] = default_fc
+            
+            # Depo stok bilgisini ekle
+            depo_stok_merge = depo_df.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
+            depo_stok_merge.columns = ['depo_kod', 'urun_kod', 'ilk_depo_stok']
+            depo_stok_merge['depo_kod'] = depo_stok_merge['depo_kod'].astype(int)
+            depo_stok_merge['urun_kod'] = depo_stok_merge['urun_kod'].astype(str)
+            result = result.merge(depo_stok_merge, on=['depo_kod', 'urun_kod'], how='left')
+            result['ilk_depo_stok'] = result['ilk_depo_stok'].fillna(0)
+            
+            # Hesaplanan kolonlar
+            result['ilk_nihai_cover'] = np.where(
+                result['satis'] > 0,
+                (result['stok'] + result['yol']) / result['satis'],
+                0
+            ).round(2)
+            
+            result['son_nihai_stok'] = result['stok'] + result['yol'] + result['sevkiyat_miktari']
+            
+            result['son_nihai_cover'] = np.where(
+                result['satis'] > 0,
+                result['son_nihai_stok'] / result['satis'],
+                0
+            ).round(2)
+            
+            final_columns = [
+                'magaza_kod', 'urun_kod', 'magaza_segment', 'urun_segment', 'durum',
+                'stok', 'yol', 'satis', 'ilk_nihai_cover', 'ihtiyac', 'sevkiyat_miktari', 
+                'depo_kod', 'stok_yoklugu_satis_kaybi', 'kpi_min', 'kpi_max', 'kpi_forward_cover',
+                'ilk_depo_stok', 'son_nihai_stok', 'son_nihai_cover'
+            ]
+            
+            available_columns = [col for col in final_columns if col in result.columns]
+            final = result[available_columns].copy()
+            
+            final = final.rename(columns={
+                'ihtiyac': 'ihtiyac_miktari',
+                'kpi_min': 'KPI_Min',
+                'kpi_max': 'KPI_Max', 
+                'kpi_forward_cover': 'KPI_Forward_Cover',
+                'ilk_depo_stok': 'Ilk_Depo_Stok',
+                'son_nihai_stok': 'Son_Nihai_Stok',
+                'son_nihai_cover': 'Son_Nihai_Cover',
+                'ilk_nihai_cover': 'Ilk_Nihai_Cover'
+            })
+            
+            # Integer dönüşüm
+            for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi', 'KPI_Min', 'KPI_Max', 'Ilk_Depo_Stok', 'Son_Nihai_Stok']:
+                if col in final.columns:
+                    final[col] = final[col].round().fillna(0).astype(int)
+            
+            # Float kolonlar
+            for col in ['Ilk_Nihai_Cover', 'Son_Nihai_Cover', 'KPI_Forward_Cover']:
+                if col in final.columns:
+                    final[col] = final[col].round(2).fillna(0)
+            
+            # Sıra numaraları
+            final.insert(0, 'sira_no', range(1, len(final) + 1))
+            final.insert(1, 'oncelik', range(1, len(final) + 1))
+            
+            # KAYDET
+            st.session_state.sevkiyat_sonuc = final
+            
+            # Orijinal verileri de kaydet (özet metrikler için)
+            st.session_state.hesaplama_anlik_df = st.session_state.anlik_stok_satis.copy()
+            st.session_state.hesaplama_depo_df = st.session_state.depo_stok.copy()
+            
+            bitis_zamani = time.time()
+            algoritma_suresi = bitis_zamani - baslaangic_zamani
+            
+            st.success(f"✅ Hesaplama tamamlandı! {len(final):,} satır oluşturuldu.")
+            st.markdown("---")
+            
+            # ============================================
+            # 📊 ÖZET METRİKLER TABLOSU - ORİJİNAL VERİLERDEN
+            # ============================================
+            st.subheader("📊 Hesaplama Özet Metrikleri")
+            
+            # ORİJİNAL CSV'LERDEN HESAPLA (FİLTRESİZ)
+            orijinal_anlik = st.session_state.anlik_stok_satis.copy()
+            orijinal_depo = st.session_state.depo_stok.copy()
+            
+            toplam_magaza_stok = orijinal_anlik['stok'].sum()  # Anlık_stok_satış.csv - stok toplamı
+            toplam_yol = orijinal_anlik['yol'].sum()  # Anlık_stok_satış.csv - yol toplamı
+            toplam_depo_stok = orijinal_depo['stok'].sum()  # depo.csv - stok toplamı
+            toplam_satis = orijinal_anlik['satis'].sum()  # Anlık_stok_satış.csv - satış toplamı
+            
+            toplam_ihtiyac = final['ihtiyac_miktari'].sum()
+            toplam_sevkiyat = final['sevkiyat_miktari'].sum()
+            performans = (toplam_sevkiyat / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
+            magaza_sayisi = orijinal_anlik['magaza_kod'].nunique()
+            urun_sayisi = orijinal_anlik['urun_kod'].nunique()
+            sevk_olan_urun_sayisi = final[final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
+            
+            # Özet tablosu oluştur
+            
+            ozet_data = {
+                'Metrik': [
+                    '📦 Toplam Mağaza Stok',
+                    '🚚 Toplam Yol',
+                    '🏭 Toplam Depo Stok',
+                    '💰 Toplam Satış',
+                    '✅ Toplam Sevkiyat',
+                    '⏱️ Algoritma Süresi (sn)',
+                    '🏪 Mağaza Sayısı',
+                    '🏷️ Ürün Sayısı',
+                    '📤 Sevk Olan Ürün Sayısı'
+                ],
+                'Değer': [
+                    str(f"{toplam_magaza_stok:,.0f}"),
+                    str(f"{toplam_yol:,.0f}"),
+                    str(f"{toplam_depo_stok:,.0f}"),
+                    str(f"{toplam_satis:,.0f}"),
+                    str(f"{toplam_sevkiyat:,.0f}"),
+                    str(f"{algoritma_suresi:.2f} saniye"),
+                    str(f"{magaza_sayisi:,}"),
+                    str(f"{urun_sayisi:,}"),
+                    str(f"{sevk_olan_urun_sayisi:,}")
                 ]
-                
-                available_columns = [col for col in final_columns if col in result.columns]
-                final = result[available_columns].copy()
-                
-                final = final.rename(columns={
-                    'ihtiyac': 'ihtiyac_miktari',
-                    'kpi_min': 'KPI_Min',
-                    'kpi_max': 'KPI_Max', 
-                    'kpi_forward_cover': 'KPI_Forward_Cover',
-                    'ilk_depo_stok': 'Ilk_Depo_Stok',
-                    'son_nihai_stok': 'Son_Nihai_Stok',
-                    'son_nihai_cover': 'Son_Nihai_Cover',
-                    'ilk_nihai_cover': 'Ilk_Nihai_Cover'
-                })
-                
-                # Integer dönüşüm
-                for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi', 'KPI_Min', 'KPI_Max', 'Ilk_Depo_Stok', 'Son_Nihai_Stok']:
-                    if col in final.columns:
-                        final[col] = final[col].round().fillna(0).astype(int)
-                
-                # Float kolonlar
-                for col in ['Ilk_Nihai_Cover', 'Son_Nihai_Cover', 'KPI_Forward_Cover']:
-                    if col in final.columns:
-                        final[col] = final[col].round(2).fillna(0)
-                
-                # Sıra numaraları
-                final.insert(0, 'sira_no', range(1, len(final) + 1))
-                final.insert(1, 'oncelik', range(1, len(final) + 1))
-                
-                # KAYDET
-                st.session_state.sevkiyat_sonuc = final
-                
-                # Orijinal verileri de kaydet (özet metrikler için)
-                st.session_state.hesaplama_anlik_df = st.session_state.anlik_stok_satis.copy()
-                st.session_state.hesaplama_depo_df = st.session_state.depo_stok.copy()
-                
-                bitis_zamani = time.time()
-                algoritma_suresi = bitis_zamani - baslaangic_zamani
-                
-                st.success(f"✅ Hesaplama tamamlandı! {len(final):,} satır oluşturuldu.")
-                st.markdown("---")
-                
-                # ============================================
-                # 📊 ÖZET METRİKLER TABLOSU - ORİJİNAL VERİLERDEN
-                # ============================================
-                st.subheader("📊 Hesaplama Özet Metrikleri")
-                
-                # ORİJİNAL CSV'LERDEN HESAPLA (FİLTRESİZ)
-                orijinal_anlik = st.session_state.anlik_stok_satis.copy()
-                orijinal_depo = st.session_state.depo_stok.copy()
-                
-                toplam_magaza_stok = orijinal_anlik['stok'].sum()  # Anlık_stok_satış.csv - stok toplamı
-                toplam_yol = orijinal_anlik['yol'].sum()  # Anlık_stok_satış.csv - yol toplamı
-                toplam_depo_stok = orijinal_depo['stok'].sum()  # depo.csv - stok toplamı
-                toplam_satis = orijinal_anlik['satis'].sum()  # Anlık_stok_satış.csv - satış toplamı
-                
-                toplam_ihtiyac = final['ihtiyac_miktari'].sum()
-                toplam_sevkiyat = final['sevkiyat_miktari'].sum()
-                performans = (toplam_sevkiyat / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
-                magaza_sayisi = orijinal_anlik['magaza_kod'].nunique()
-                urun_sayisi = orijinal_anlik['urun_kod'].nunique()
-                sevk_olan_urun_sayisi = final[final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
-                
-                # Özet tablosu oluştur
-                
-                ozet_data = {
-                    'Metrik': [
-                        '📦 Toplam Mağaza Stok',
-                        '🚚 Toplam Yol',
-                        '🏭 Toplam Depo Stok',
-                        '💰 Toplam Satış',
-                        '✅ Toplam Sevkiyat',
-                        '⏱️ Algoritma Süresi (sn)',
-                        '🏪 Mağaza Sayısı',
-                        '🏷️ Ürün Sayısı',
-                        '📤 Sevk Olan Ürün Sayısı'
-                    ],
-                    'Değer': [
-                        str(f"{toplam_magaza_stok:,.0f}"),
-                        str(f"{toplam_yol:,.0f}"),
-                        str(f"{toplam_depo_stok:,.0f}"),
-                        str(f"{toplam_satis:,.0f}"),
-                        str(f"{toplam_sevkiyat:,.0f}"),
-                        str(f"{algoritma_suresi:.2f} saniye"),
-                        str(f"{magaza_sayisi:,}"),
-                        str(f"{urun_sayisi:,}"),
-                        str(f"{sevk_olan_urun_sayisi:,}")
-                    ]
-                }             
-                ozet_df = pd.DataFrame(ozet_data)
-                
-                # Tabloyu göster
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    st.dataframe(
-                        ozet_df,
-                        use_container_width=True,
-                        hide_index=True,
-                        height=380
-                    )
-                
-                with col2:
-                    # Önemli metrikler
-                    st.metric(
-                        "🎯 Genel Performans", 
-                        f"{performans:.1f}%",
-                        delta=f"{performans - 100:.1f}%" if performans < 100 else "Hedef Aşıldı!"
-                    )
-                    
-                    st.metric(
-                        "⚡ İşlem Süresi", 
-                        f"{algoritma_suresi:.2f} sn"
-                    )
-                    
-                    # Stok durumu özeti
-                    toplam_stok_sistemi = toplam_magaza_stok + toplam_yol + toplam_depo_stok
-                    st.metric(
-                        "💼 Toplam Sistem Stok",
-                        f"{toplam_stok_sistemi:,.0f}"
-                    )
-                
-                # ============================================
-                # 🎯 KPI KONTROL TABLOSU
-                # ============================================
-                st.markdown("---")
-                st.subheader("🎯 KPI Kontrol Tablosu")
-                
-                # KPI hesaplamaları için orijinal df'i kullan
-                kpi_df_hesap = df.copy()
-                
-                # Cover hesapla
-                kpi_df_hesap['cover'] = np.where(
-                    kpi_df_hesap['satis'] > 0,
-                    (kpi_df_hesap['stok'] + kpi_df_hesap['yol']) / kpi_df_hesap['satis'],
-                    0
+            }             
+            ozet_df = pd.DataFrame(ozet_data)
+            
+            # Tabloyu göster
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.dataframe(
+                    ozet_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=380
+                )
+            
+            with col2:
+                # Önemli metrikler
+                st.metric(
+                    "🎯 Genel Performans", 
+                    f"{performans:.1f}%",
+                    delta=f"{performans - 100:.1f}%" if performans < 100 else "Hedef Aşıldı!"
                 )
                 
-                # KPI metrikleri hesapla
-                toplam_nokta_satisi = len(kpi_df_hesap[(kpi_df_hesap['stok'] > 0) | (kpi_df_hesap['satis'] > 0) | (kpi_df_hesap['yol'] > 0)])
-                min_alti_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) < kpi_df_hesap['min_deger']])
-                maks_ustu_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) > kpi_df_hesap['max_deger']])
-                cover_12_ustu = len(kpi_df_hesap[kpi_df_hesap['cover'] > 12])
-                cover_4_alti = len(kpi_df_hesap[(kpi_df_hesap['cover'] < 4) & (kpi_df_hesap['cover'] > 0)])
-                ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
-                brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
+                st.metric(
+                    "⚡ İşlem Süresi", 
+                    f"{algoritma_suresi:.2f} sn"
+                )
                 
-                kpi_kontrol_data = {
-                    'KPI Metriği': [
-                        '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
-                        '⚠️ Min Altında Stok Noktası',
-                        '🔴 Maks Üstü Stok Noktası',
-                        '📈 Cover > 12 Hafta Nokta Sayısı',
-                        '📉 Cover < 4 Hafta Nokta Sayısı',
-                        '❌ İhtiyaç > 100 ama Sevkiyat = 0',
-                        '💰 Brüt Marj Sınırına Takılan'
-                    ],
-                    'Değer': [
-                        f"{toplam_nokta_satisi:,}",
-                        f"{min_alti_stok:,}",
-                        f"{maks_ustu_stok:,}",
-                        f"{cover_12_ustu:,}",
-                        f"{cover_4_alti:,}",
-                        f"{ihtiyac_100_sevk_0:,}",
-                        f"{brut_marj_filtre:,}"
-                    ],
-                    'Oran %': [
-                        "100%",
-                        f"{min_alti_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                        f"{maks_ustu_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                        f"{cover_12_ustu/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                        f"{cover_4_alti/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                        f"{ihtiyac_100_sevk_0/len(final)*100:.1f}%" if len(final) > 0 else "0%",
-                        f"{brut_marj_filtre/len(df)*100:.1f}%" if len(df) > 0 else "0%"
-                    ]
-                }
-                
-                kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
-                st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
-                
-                # Hesaplama başarılı flag
-                hesaplama_basarili = True
-                
-            except Exception as e:
-                st.error(f"❌ Hesaplama hatası: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
-        
-        # SPINNER DIŞINDA - İndirme butonları
-        if hesaplama_basarili and st.session_state.sevkiyat_sonuc is not None:
+                # Stok durumu özeti
+                toplam_stok_sistemi = toplam_magaza_stok + toplam_yol + toplam_depo_stok
+                st.metric(
+                    "💼 Toplam Sistem Stok",
+                    f"{toplam_stok_sistemi:,.0f}"
+                )
+            
+            # ============================================
+            # 🎯 KPI KONTROL TABLOSU
+            # ============================================
+            st.markdown("---")
+            st.subheader("🎯 KPI Kontrol Tablosu")
+            
+            # KPI hesaplamaları için orijinal df'i kullan
+            kpi_df_hesap = df.copy()
+            
+            # Cover hesapla
+            kpi_df_hesap['cover'] = np.where(
+                kpi_df_hesap['satis'] > 0,
+                (kpi_df_hesap['stok'] + kpi_df_hesap['yol']) / kpi_df_hesap['satis'],
+                0
+            )
+            
+            # KPI metrikleri hesapla
+            toplam_nokta_satisi = len(kpi_df_hesap[(kpi_df_hesap['stok'] > 0) | (kpi_df_hesap['satis'] > 0) | (kpi_df_hesap['yol'] > 0)])
+            min_alti_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) < kpi_df_hesap['min_deger']])
+            maks_ustu_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) > kpi_df_hesap['max_deger']])
+            cover_12_ustu = len(kpi_df_hesap[kpi_df_hesap['cover'] > 12])
+            cover_4_alti = len(kpi_df_hesap[(kpi_df_hesap['cover'] < 4) & (kpi_df_hesap['cover'] > 0)])
+            ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
+            brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
+            
+            kpi_kontrol_data = {
+                'KPI Metriği': [
+                    '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
+                    '⚠️ Min Altında Stok Noktası',
+                    '🔴 Maks Üstü Stok Noktası',
+                    '📈 Cover > 12 Hafta Nokta Sayısı',
+                    '📉 Cover < 4 Hafta Nokta Sayısı',
+                    '❌ İhtiyaç > 100 ama Sevkiyat = 0',
+                    '💰 Brüt Marj Sınırına Takılan'
+                ],
+                'Değer': [
+                    f"{toplam_nokta_satisi:,}",
+                    f"{min_alti_stok:,}",
+                    f"{maks_ustu_stok:,}",
+                    f"{cover_12_ustu:,}",
+                    f"{cover_4_alti:,}",
+                    f"{ihtiyac_100_sevk_0:,}",
+                    f"{brut_marj_filtre:,}"
+                ],
+                'Oran %': [
+                    "100%",
+                    f"{min_alti_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                    f"{maks_ustu_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                    f"{cover_12_ustu/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                    f"{cover_4_alti/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                    f"{ihtiyac_100_sevk_0/len(final)*100:.1f}%" if len(final) > 0 else "0%",
+                    f"{brut_marj_filtre/len(df)*100:.1f}%" if len(df) > 0 else "0%"
+                ]
+            }
+            
+            kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
+            st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
+            
+            # Status'u güncelle
+            status_text.success("✅ Hesaplama tamamlandı!")
+            
             st.markdown("---")
             st.subheader("📥 Dışa Aktar")
             col1, col2, col3 = st.columns([1, 1, 2])
             
-            final_export = st.session_state.sevkiyat_sonuc.copy()
-            
             with col1:
-                sap_data = final_export[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
+                sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
                 sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
                 
                 # Excel export
@@ -1526,7 +1518,7 @@ elif menu == "📐 Hesaplama":
             with col2:
                 # Tam detay Excel
                 full_buffer = BytesIO()
-                final_export.to_excel(full_buffer, index=False, engine='openpyxl')
+                final.to_excel(full_buffer, index=False, engine='openpyxl')
                 full_buffer.seek(0)
                 
                 st.download_button(
@@ -1539,6 +1531,11 @@ elif menu == "📐 Hesaplama":
                 )
             
             st.success("✅ Hesaplama tamamlandı! Raporlar menüsünden detaylı analizlere ulaşabilirsiniz.")
+            
+        except Exception as e:
+            st.error(f"❌ Hesaplama hatası: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 # ============================================

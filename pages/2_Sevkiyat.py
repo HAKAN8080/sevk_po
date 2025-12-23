@@ -1437,57 +1437,69 @@ elif menu == "📐 Hesaplama":
             st.markdown("---")
             st.subheader("🎯 KPI Kontrol Tablosu")
             
-            # KPI hesaplamaları için orijinal df'i kullan
-            kpi_df_hesap = df.copy()
-            
-            # Cover hesapla
-            kpi_df_hesap['cover'] = np.where(
-                kpi_df_hesap['satis'] > 0,
-                (kpi_df_hesap['stok'] + kpi_df_hesap['yol']) / kpi_df_hesap['satis'],
-                0
-            )
-            
-            # KPI metrikleri hesapla
-            toplam_nokta_satisi = len(kpi_df_hesap[(kpi_df_hesap['stok'] > 0) | (kpi_df_hesap['satis'] > 0) | (kpi_df_hesap['yol'] > 0)])
-            min_alti_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) < kpi_df_hesap['min_deger']])
-            maks_ustu_stok = len(kpi_df_hesap[(kpi_df_hesap['stok'] + kpi_df_hesap['yol']) > kpi_df_hesap['max_deger']])
-            cover_12_ustu = len(kpi_df_hesap[kpi_df_hesap['cover'] > 12])
-            cover_4_alti = len(kpi_df_hesap[(kpi_df_hesap['cover'] < 4) & (kpi_df_hesap['cover'] > 0)])
-            ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
-            brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
-            
-            kpi_kontrol_data = {
-                'KPI Metriği': [
-                    '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
-                    '⚠️ Min Altında Stok Noktası',
-                    '🔴 Maks Üstü Stok Noktası',
-                    '📈 Cover > 12 Hafta Nokta Sayısı',
-                    '📉 Cover < 4 Hafta Nokta Sayısı',
-                    '❌ İhtiyaç > 100 ama Sevkiyat = 0',
-                    '💰 Brüt Marj Sınırına Takılan'
-                ],
-                'Değer': [
-                    f"{toplam_nokta_satisi:,}",
-                    f"{min_alti_stok:,}",
-                    f"{maks_ustu_stok:,}",
-                    f"{cover_12_ustu:,}",
-                    f"{cover_4_alti:,}",
-                    f"{ihtiyac_100_sevk_0:,}",
-                    f"{brut_marj_filtre:,}"
-                ],
-                'Oran %': [
-                    "100%",
-                    f"{min_alti_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                    f"{maks_ustu_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                    f"{cover_12_ustu/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                    f"{cover_4_alti/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
-                    f"{ihtiyac_100_sevk_0/len(final)*100:.1f}%" if len(final) > 0 else "0%",
-                    f"{brut_marj_filtre/len(df)*100:.1f}%" if len(df) > 0 else "0%"
-                ]
-            }
-            
-            kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
-            st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
+            try:
+                # KPI hesaplamaları için orijinal veriden hesapla
+                orijinal_df = st.session_state.anlik_stok_satis.copy()
+                
+                # Cover hesapla
+                orijinal_df['cover'] = np.where(
+                    orijinal_df['satis'] > 0,
+                    (orijinal_df['stok'] + orijinal_df['yol']) / orijinal_df['satis'],
+                    0
+                )
+                
+                # KPI metrikleri hesapla
+                toplam_nokta_satisi = len(orijinal_df[(orijinal_df['stok'] > 0) | (orijinal_df['satis'] > 0) | (orijinal_df['yol'] > 0)])
+                
+                # Min/max kontrolü için KPI'dan değerleri al
+                if st.session_state.kpi is not None and not st.session_state.kpi.empty:
+                    avg_min = st.session_state.kpi['min_deger'].mean() if 'min_deger' in st.session_state.kpi.columns else 0
+                    avg_max = st.session_state.kpi['max_deger'].mean() if 'max_deger' in st.session_state.kpi.columns else 999999
+                else:
+                    avg_min = 0
+                    avg_max = 999999
+                
+                min_alti_stok = len(orijinal_df[(orijinal_df['stok'] + orijinal_df['yol']) < avg_min])
+                maks_ustu_stok = len(orijinal_df[(orijinal_df['stok'] + orijinal_df['yol']) > avg_max])
+                cover_12_ustu = len(orijinal_df[orijinal_df['cover'] > 12])
+                cover_4_alti = len(orijinal_df[(orijinal_df['cover'] < 4) & (orijinal_df['cover'] > 0)])
+                ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
+                brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
+                
+                kpi_kontrol_data = {
+                    'KPI Metriği': [
+                        '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
+                        '⚠️ Min Altında Stok Noktası',
+                        '🔴 Maks Üstü Stok Noktası',
+                        '📈 Cover > 12 Hafta Nokta Sayısı',
+                        '📉 Cover < 4 Hafta Nokta Sayısı',
+                        '❌ İhtiyaç > 100 ama Sevkiyat = 0',
+                        '💰 Brüt Marj Sınırına Takılan'
+                    ],
+                    'Değer': [
+                        f"{toplam_nokta_satisi:,}",
+                        f"{min_alti_stok:,}",
+                        f"{maks_ustu_stok:,}",
+                        f"{cover_12_ustu:,}",
+                        f"{cover_4_alti:,}",
+                        f"{ihtiyac_100_sevk_0:,}",
+                        f"{brut_marj_filtre:,}"
+                    ],
+                    'Oran %': [
+                        "100%",
+                        f"{min_alti_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                        f"{maks_ustu_stok/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                        f"{cover_12_ustu/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                        f"{cover_4_alti/toplam_nokta_satisi*100:.1f}%" if toplam_nokta_satisi > 0 else "0%",
+                        f"{ihtiyac_100_sevk_0/len(final)*100:.1f}%" if len(final) > 0 else "0%",
+                        f"{brut_marj_filtre/len(orijinal_df)*100:.1f}%" if len(orijinal_df) > 0 else "0%"
+                    ]
+                }
+                
+                kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
+                st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
+            except Exception as kpi_err:
+                st.warning(f"⚠️ KPI tablosu oluşturulamadı: {str(kpi_err)}")
             
             # Status'u güncelle
             status_text.success("✅ Hesaplama tamamlandı!")

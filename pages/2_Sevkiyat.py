@@ -1296,16 +1296,24 @@ elif menu == "📐 Hesaplama":
             if paket_cols_to_drop:
                 result = result.drop(columns=paket_cols_to_drop, errors='ignore')
             
-            if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
-                paket_master = st.session_state.urun_master[['urun_kod', 'paket_ici']].drop_duplicates('urun_kod').copy()
-                paket_master['urun_kod'] = paket_master['urun_kod'].astype(str)
-                paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
-                paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1
-                
-                result = result.merge(paket_master, on='urun_kod', how='left')
-                result['paket_ici'] = result['paket_ici'].fillna(1).astype(int)
-            else:
+            # Paket bilgisi eklemeyi dene
+            try:
+                urun_master = st.session_state.urun_master
+                if urun_master is not None and 'paket_ici' in urun_master.columns:
+                    paket_master = urun_master[['urun_kod', 'paket_ici']].drop_duplicates('urun_kod').copy()
+                    paket_master['urun_kod'] = paket_master['urun_kod'].astype(str)
+                    paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
+                    paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1
+                    
+                    result = result.merge(paket_master, on='urun_kod', how='left')
+                    result['paket_ici'] = result['paket_ici'].fillna(1).astype(int)
+                    st.write("✅ Paket bilgisi ürün master'dan eklendi")
+                else:
+                    result['paket_ici'] = 1
+                    st.write("ℹ️ Ürün master'da paket_ici kolonu yok, varsayılan 1 kullanılıyor")
+            except Exception as paket_err:
                 result['paket_ici'] = 1
+                st.warning(f"⚠️ Paket bilgisi eklenemedi: {str(paket_err)}, varsayılan 1 kullanılıyor")
             
             # Sevkiyat paket adeti hesapla
             result['sevkiyat_paket_adet'] = np.where(

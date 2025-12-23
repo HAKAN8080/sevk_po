@@ -1669,39 +1669,34 @@ elif menu == "📈 Raporlar":
             )
     
     # ============================================
-    # 📥 DIŞA AKTAR TAB - SADELEŞTİRİLMİŞ
+    # 📥 DIŞA AKTAR TAB - CSV FORMATI (HIZLI)
     # ============================================
     with tab4:
         st.subheader("📥 Sevkiyat Verilerini İndir")
         
         final = st.session_state.sevkiyat_sonuc
         
+        st.info("💡 CSV formatı büyük veriler için daha hızlıdır. Excel'de açabilirsiniz.")
+        
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("### 📋 SAP Formatı")
-            st.caption("Sadece pozitif sevkiyatlar")
+            st.caption("Sadece pozitif sevkiyatlar (4 kolon)")
             
             sap_data = final[final['sevkiyat_miktari'] > 0][['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']]
             st.metric("Satır Sayısı", f"{len(sap_data):,}")
             
-            # Butona basınca Excel oluştur
-            if st.button("📥 SAP Excel Hazırla", key="sap_hazirla"):
-                from io import BytesIO
-                sap_buffer = BytesIO()
-                sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
-                sap_buffer.seek(0)
-                st.session_state['sap_excel'] = sap_buffer.getvalue()
-                st.success("✅ SAP Excel hazır!")
+            # CSV olarak direkt indir
+            sap_csv = sap_data.to_csv(index=False, encoding='utf-8-sig')
             
-            if 'sap_excel' in st.session_state:
-                st.download_button(
-                    label="⬇️ SAP Excel İndir",
-                    data=st.session_state['sap_excel'],
-                    file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="sap_indir"
-                )
+            st.download_button(
+                label="📥 SAP CSV İndir",
+                data=sap_csv,
+                file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="sap_csv_indir"
+            )
         
         with col2:
             st.markdown("### 📊 Tam Detay")
@@ -1709,23 +1704,16 @@ elif menu == "📈 Raporlar":
             
             st.metric("Satır Sayısı", f"{len(final):,}")
             
-            # Butona basınca Excel oluştur
-            if st.button("📥 Tam Detay Excel Hazırla", key="full_hazirla"):
-                from io import BytesIO
-                full_buffer = BytesIO()
-                final.to_excel(full_buffer, index=False, engine='openpyxl')
-                full_buffer.seek(0)
-                st.session_state['full_excel'] = full_buffer.getvalue()
-                st.success("✅ Tam Detay Excel hazır!")
+            # CSV olarak direkt indir
+            full_csv = final.to_csv(index=False, encoding='utf-8-sig')
             
-            if 'full_excel' in st.session_state:
-                st.download_button(
-                    label="⬇️ Tam Detay Excel İndir",
-                    data=st.session_state['full_excel'],
-                    file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="full_indir"
-                )
+            st.download_button(
+                label="📥 Tam Detay CSV İndir",
+                data=full_csv,
+                file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="full_csv_indir"
+            )
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
 # ============================================

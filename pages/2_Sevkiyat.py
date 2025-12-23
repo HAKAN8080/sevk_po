@@ -167,8 +167,13 @@ elif menu == "🫧 Segmentasyon":
     
     # Segmentasyon uygula
     temp_prod = urun_aggregated.copy()
+    
+    # SATIŞ OLMAYAN ÜRÜNLER İÇİN DÜZELTME: cover inf olan ürünleri 20-inf'e ata
+    temp_prod['stok_satis_orani_adj'] = temp_prod['stok_satis_orani'].replace([np.inf, -np.inf], 999)
+    temp_prod.loc[temp_prod['satis'] == 0, 'stok_satis_orani_adj'] = 999  # Satış 0 ise 20-inf'e at
+    
     temp_prod['segment'] = pd.cut(
-        temp_prod['stok_satis_orani'], 
+        temp_prod['stok_satis_orani_adj'], 
         bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
         labels=product_labels,
         include_lowest=True
@@ -210,8 +215,13 @@ elif menu == "🫧 Segmentasyon":
     
     # Segmentasyon uygula
     temp_store = magaza_aggregated.copy()
+    
+    # SATIŞ OLMAYAN MAĞAZALAR İÇİN DÜZELTME: cover inf olanları 20-inf'e ata
+    temp_store['stok_satis_orani_adj'] = temp_store['stok_satis_orani'].replace([np.inf, -np.inf], 999)
+    temp_store.loc[temp_store['satis'] == 0, 'stok_satis_orani_adj'] = 999  # Satış 0 ise 20-inf'e at
+    
     temp_store['segment'] = pd.cut(
-        temp_store['stok_satis_orani'], 
+        temp_store['stok_satis_orani_adj'], 
         bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
         labels=store_labels,
         include_lowest=True
@@ -235,11 +245,15 @@ elif menu == "🫧 Segmentasyon":
                 'product_ranges': product_ranges,
                 'store_ranges': store_ranges
             }
-            st.session_state.prod_segments = product_labels
-            st.session_state.store_segments = store_labels
-            st.session_state.urun_segment_map = temp_prod.set_index('urun_kod')['segment'].to_dict()
-            st.session_state.magaza_segment_map = temp_store.set_index('magaza_kod')['segment'].to_dict()
-            st.success("✅ Ayarlar kaydedildi!")
+            # Seg_ prefix ekle - Excel tarih sorunu çözümü
+            st.session_state.prod_segments = ["Seg_" + lbl for lbl in product_labels]
+            st.session_state.store_segments = ["Seg_" + lbl for lbl in store_labels]
+            
+            # String key'lerle kaydet - veri tipi uyumu için
+            st.session_state.urun_segment_map = {str(k).strip(): "Seg_" + str(v) for k, v in temp_prod.set_index('urun_kod')['segment'].to_dict().items()}
+            st.session_state.magaza_segment_map = {str(k).strip(): "Seg_" + str(v) for k, v in temp_store.set_index('magaza_kod')['segment'].to_dict().items()}
+            
+            st.success(f"✅ Ayarlar kaydedildi! Ürün map: {len(st.session_state.urun_segment_map)}, Mağaza map: {len(st.session_state.magaza_segment_map)}")
     with col2:
         st.info("ℹ️ Kaydetmeseniz de default değerler kullanılacaktır.")
             
@@ -830,24 +844,41 @@ elif menu == "📐 Hesaplama":
 
 
 
-                # 3. SEGMENTASYON - VERİ TİPİ UYUMLU
+                # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
                 if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
-                    # String key'li dictionary oluştur
-                    urun_seg_map_str = {str(k): str(v) for k, v in st.session_state.urun_segment_map.items()}
-                    magaza_seg_map_str = {str(k): str(v) for k, v in st.session_state.magaza_segment_map.items()}
+                    # Tüm key'leri string'e çevir ve strip uygula
+                    urun_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.urun_segment_map.items()}
+                    magaza_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.magaza_segment_map.items()}
                     
-                    # String'e çevirip map yap
-                    df['urun_segment'] = df['urun_kod'].astype(str).map(urun_seg_map_str).fillna('0-4')
-                    df['magaza_segment'] = df['magaza_kod'].astype(str).map(magaza_seg_map_str).fillna('0-4')
+                    # df'deki kodları da string'e çevir ve strip uygula
+                    df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
+                    df['magaza_kod'] = df['magaza_kod'].astype(str).str.strip()
                     
-                    # Debug
-                    urun_eslesen = (df['urun_segment'] != '0-4').sum()
-                    magaza_eslesen = (df['magaza_segment'] != '0-4').sum()
-                    st.info(f"📊 Segment eşleşme: Ürün {urun_eslesen}/{len(df)} | Mağaza {magaza_eslesen}/{len(df)}")
+                    df['urun_segment'] = df['urun_kod'].map(urun_seg_map_str)
+                    df['magaza_segment'] = df['magaza_kod'].map(magaza_seg_map_str)
+                    
+                    # Eşleşme istatistikleri
+                    urun_eslesen = df['urun_segment'].notna().sum()
+                    magaza_eslesen = df['magaza_segment'].notna().sum()
+                    
+                    st.info(f"📊 Segment eşleşme: Ürün {urun_eslesen:,}/{len(df):,} ({urun_eslesen/len(df)*100:.1f}%) | Mağaza {magaza_eslesen:,}/{len(df):,} ({magaza_eslesen/len(df)*100:.1f}%)")
+                    
+                    # Debug bilgisi - eşleşme düşükse
+                    if urun_eslesen < len(df) * 0.5:
+                        st.warning(f"⚠️ Ürün eşleşme düşük! Map'te {len(urun_seg_map_str)} ürün var, df'te {df['urun_kod'].nunique()} unique ürün var.")
+                        with st.expander("🔍 Debug: İlk 5 ürün kodu karşılaştırması"):
+                            df_ornekler = df['urun_kod'].head(5).tolist()
+                            map_ornekler = list(urun_seg_map_str.keys())[:5]
+                            st.write(f"DF'teki örnekler: {df_ornekler}")
+                            st.write(f"Map'teki örnekler: {map_ornekler}")
+                    
+                    # NaN'ları default değerle doldur
+                    df['urun_segment'] = df['urun_segment'].fillna('Seg_20-inf')
+                    df['magaza_segment'] = df['magaza_segment'].fillna('Seg_20-inf')
                 else:
-                    df['urun_segment'] = '0-4'
-                    df['magaza_segment'] = '0-4'
-                    st.warning("⚠️ Segment map bulunamadı, default '0-4' kullanılıyor")
+                    df['urun_segment'] = 'Seg_20-inf'
+                    df['magaza_segment'] = 'Seg_20-inf'
+                    st.warning("⚠️ Segment map bulunamadı, default 'Seg_20-inf' kullanılıyor")
 
                 
                 # ============================================
@@ -1079,24 +1110,77 @@ elif menu == "📐 Hesaplama":
                 st.success("✅ Depo stok dağıtımı tamamlandı!")
                 
                 # ============================================
-                # 10. SONUÇ HAZIRLA
+                # 10. SONUÇ HAZIRLA - GENİŞLETİLMİŞ KOLONLAR
                 # ============================================
+                
+                # Önce KPI'dan forward_cover, min, max değerlerini al
+                if not kpi_df.empty and 'mg_id' in kpi_df.columns:
+                    kpi_lookup_df = kpi_df.copy()
+                    kpi_lookup_df['mg_id'] = kpi_lookup_df['mg_id'].astype(str)
+                    result = result.merge(
+                        kpi_lookup_df[['mg_id', 'min_deger', 'max_deger', 'forward_cover']].rename(
+                            columns={'mg_id': 'mg', 'min_deger': 'kpi_min', 'max_deger': 'kpi_max', 'forward_cover': 'kpi_forward_cover'}
+                        ),
+                        on='mg', how='left'
+                    )
+                else:
+                    result['kpi_min'] = 0
+                    result['kpi_max'] = 999999
+                    result['kpi_forward_cover'] = default_fc
+                
+                # Depo stok bilgisini ekle
+                depo_stok_merge = depo_df.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
+                depo_stok_merge.columns = ['depo_kod', 'urun_kod', 'ilk_depo_stok']
+                depo_stok_merge['depo_kod'] = depo_stok_merge['depo_kod'].astype(int)
+                depo_stok_merge['urun_kod'] = depo_stok_merge['urun_kod'].astype(str)
+                result = result.merge(depo_stok_merge, on=['depo_kod', 'urun_kod'], how='left')
+                result['ilk_depo_stok'] = result['ilk_depo_stok'].fillna(0)
+                
+                # Hesaplanan kolonlar
+                result['ilk_nihai_cover'] = np.where(
+                    result['satis'] > 0,
+                    (result['stok'] + result['yol']) / result['satis'],
+                    0
+                ).round(2)
+                
+                result['son_nihai_stok'] = result['stok'] + result['yol'] + result['sevkiyat_miktari']
+                
+                result['son_nihai_cover'] = np.where(
+                    result['satis'] > 0,
+                    result['son_nihai_stok'] / result['satis'],
+                    0
+                ).round(2)
+                
                 final_columns = [
                     'magaza_kod', 'urun_kod', 'magaza_segment', 'urun_segment', 'durum',
-                    'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_miktari', 'depo_kod', 'stok_yoklugu_satis_kaybi'
+                    'stok', 'yol', 'satis', 'ilk_nihai_cover', 'ihtiyac', 'sevkiyat_miktari', 
+                    'depo_kod', 'stok_yoklugu_satis_kaybi', 'kpi_min', 'kpi_max', 'kpi_forward_cover',
+                    'ilk_depo_stok', 'son_nihai_stok', 'son_nihai_cover'
                 ]
                 
                 available_columns = [col for col in final_columns if col in result.columns]
                 final = result[available_columns].copy()
                 
                 final = final.rename(columns={
-                    'ihtiyac': 'ihtiyac_miktari'
+                    'ihtiyac': 'ihtiyac_miktari',
+                    'kpi_min': 'KPI_Min',
+                    'kpi_max': 'KPI_Max', 
+                    'kpi_forward_cover': 'KPI_Forward_Cover',
+                    'ilk_depo_stok': 'Ilk_Depo_Stok',
+                    'son_nihai_stok': 'Son_Nihai_Stok',
+                    'son_nihai_cover': 'Son_Nihai_Cover',
+                    'ilk_nihai_cover': 'Ilk_Nihai_Cover'
                 })
                 
                 # Integer dönüşüm
-                for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi']:
+                for col in ['stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi', 'KPI_Min', 'KPI_Max', 'Ilk_Depo_Stok', 'Son_Nihai_Stok']:
                     if col in final.columns:
                         final[col] = final[col].round().fillna(0).astype(int)
+                
+                # Float kolonlar
+                for col in ['Ilk_Nihai_Cover', 'Son_Nihai_Cover', 'KPI_Forward_Cover']:
+                    if col in final.columns:
+                        final[col] = final[col].round(2).fillna(0)
                 
                 # Sıra numaraları
                 final.insert(0, 'sira_no', range(1, len(final) + 1))
@@ -1105,6 +1189,10 @@ elif menu == "📐 Hesaplama":
                 # KAYDET
                 st.session_state.sevkiyat_sonuc = final
                 
+                # Orijinal verileri de kaydet (özet metrikler için)
+                st.session_state.hesaplama_anlik_df = st.session_state.anlik_stok_satis.copy()
+                st.session_state.hesaplama_depo_df = st.session_state.depo_stok.copy()
+                
                 bitis_zamani = time.time()
                 algoritma_suresi = bitis_zamani - baslaangic_zamani
                 
@@ -1112,20 +1200,24 @@ elif menu == "📐 Hesaplama":
                 st.markdown("---")
                 
                 # ============================================
-                # 📊 ÖZET METRİKLER TABLOSU
+                # 📊 ÖZET METRİKLER TABLOSU - ORİJİNAL VERİLERDEN
                 # ============================================
                 st.subheader("📊 Hesaplama Özet Metrikleri")
                 
-                # Metrikleri hesapla
-                toplam_magaza_stok = df['stok'].sum()
-                toplam_yol = df['yol'].sum()
-                toplam_depo_stok = depo_df['stok'].sum()
-                toplam_satis = df['satis'].sum()
+                # ORİJİNAL CSV'LERDEN HESAPLA (FİLTRESİZ)
+                orijinal_anlik = st.session_state.anlik_stok_satis.copy()
+                orijinal_depo = st.session_state.depo_stok.copy()
+                
+                toplam_magaza_stok = orijinal_anlik['stok'].sum()  # Anlık_stok_satış.csv - stok toplamı
+                toplam_yol = orijinal_anlik['yol'].sum()  # Anlık_stok_satış.csv - yol toplamı
+                toplam_depo_stok = orijinal_depo['stok'].sum()  # depo.csv - stok toplamı
+                toplam_satis = orijinal_anlik['satis'].sum()  # Anlık_stok_satış.csv - satış toplamı
+                
                 toplam_ihtiyac = final['ihtiyac_miktari'].sum()
                 toplam_sevkiyat = final['sevkiyat_miktari'].sum()
                 performans = (toplam_sevkiyat / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
-                magaza_sayisi = df['magaza_kod'].nunique()
-                urun_sayisi = df['urun_kod'].nunique()
+                magaza_sayisi = orijinal_anlik['magaza_kod'].nunique()
+                urun_sayisi = orijinal_anlik['urun_kod'].nunique()
                 sevk_olan_urun_sayisi = final[final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
                 
                 # Özet tablosu oluştur
@@ -1191,29 +1283,42 @@ elif menu == "📐 Hesaplama":
                 
                 st.markdown("---")
                 
-                # İndirme butonları
+                # İndirme butonları - EXCEL FORMATI
+                st.subheader("📥 Dışa Aktar")
                 col1, col2, col3 = st.columns([1, 1, 2])
+                
                 with col1:
                     sap_data = final[['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']].copy()
                     sap_data = sap_data[sap_data['sevkiyat_miktari'] > 0]
                     
+                    # Excel export
+                    from io import BytesIO
+                    sap_buffer = BytesIO()
+                    sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
+                    sap_buffer.seek(0)
+                    
                     st.download_button(
-                        label="📥 SAP Dosyası İndir (CSV)",
-                        data=sap_data.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="sap_sevkiyat_detay.csv",
-                        mime="text/csv",
+                        label="📥 SAP Dosyası İndir (Excel)",
+                        data=sap_buffer.getvalue(),
+                        file_name="sap_sevkiyat_detay.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
-                        key="hesaplama_download_sap_csv"
+                        key="hesaplama_download_sap_excel"
                     )
                 
                 with col2:
+                    # Tam detay Excel
+                    full_buffer = BytesIO()
+                    final.to_excel(full_buffer, index=False, engine='openpyxl')
+                    full_buffer.seek(0)
+                    
                     st.download_button(
-                        label="📥 Tam Detay İndir (CSV)",
-                        data=final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="sevkiyat_tam_detay.csv",
-                        mime="text/csv",
+                        label="📥 Tam Detay İndir (Excel)",
+                        data=full_buffer.getvalue(),
+                        file_name="sevkiyat_tam_detay.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
-                        key="hesaplama_download_full_csv"
+                        key="hesaplama_download_full_excel"
                     )
                 
             except Exception as e:
@@ -1268,9 +1373,14 @@ elif menu == "📈 Raporlar":
             if ihtiyac_kolon_adi in result_df.columns:
                 st.write(f"- İhtiyaç miktarı > 0: {(result_df[ihtiyac_kolon_adi] > 0).sum()}")
         
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📦 Ürün Analizi", "🏪 Mağaza Analizi", "⚠️ Satış Kaybı Analizi", "🗺️ İl Bazında Harita", "📥 Dışa Aktar"])
-        
- 
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📦 Ürün Analizi",
+            "🏪 Mağaza Analizi", 
+            "⚠️ Satış Kaybı Analizi",
+            "🗺️ İl Bazında Harita",
+            "📥 Dışa Aktar"
+        ])
+
 
         # ============================================
         # ÜRÜN ANALİZİ - SADELEŞTİRİLMİŞ VERSİYON
@@ -1399,8 +1509,6 @@ elif menu == "📈 Raporlar":
             magaza_segment_kayip = magaza_segment_kayip.sort_values('Mağaza Segmenti')
             
             st.dataframe(magaza_segment_kayip, width='stretch', hide_index=True, height=250)
-        
-      
         
         # ============================================
         # İL BAZINDA HARİTA - SEVKİYAT/MAĞAZA BAZLI
@@ -1658,12 +1766,21 @@ elif menu == "📈 Raporlar":
                 
                 else:
                     st.warning("Harita için yeterli il verisi bulunamadı.")
-              # 📥 DIŞA AKTAR TAB
+        
+        # ============================================
+        # 📥 DIŞA AKTAR TAB - EXCEL FORMATI
+        # ============================================
         with tab5:
             st.subheader("📥 Sevkiyat Verilerini Dışa Aktar")
             
             if st.session_state.sevkiyat_sonuc is not None:
                 final = st.session_state.sevkiyat_sonuc.copy()
+                
+                # Segment kolonlarını Excel-safe yap (zaten Seg_ prefix var ama kontrol edelim)
+                for col in ['urun_segment', 'magaza_segment']:
+                    if col in final.columns:
+                        # Eğer Seg_ ile başlamıyorsa ekle
+                        final[col] = final[col].astype(str).apply(lambda x: x if x.startswith('Seg_') else f"Seg_{x}")
                 
                 col1, col2 = st.columns(2)
                 
@@ -1676,26 +1793,36 @@ elif menu == "📈 Raporlar":
                     
                     st.metric("Satır Sayısı", f"{len(sap_data):,}")
                     
+                    # Excel export
+                    from io import BytesIO
+                    sap_buffer = BytesIO()
+                    sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
+                    sap_buffer.seek(0)
+                    
                     st.download_button(
-                        label="📥 SAP CSV İndir",
-                        data=sap_data.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
+                        label="📥 SAP Excel İndir",
+                        data=sap_buffer.getvalue(),
+                        file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
                         key="rapor_download_sap"
                     )
                 
                 with col2:
                     st.markdown("### 📊 Tam Detay")
-                    st.caption("Tüm kolonlar dahil (segment, durum, kayıp vs.)")
+                    st.caption("Tüm kolonlar dahil (segment, durum, KPI, cover vs.)")
                     
                     st.metric("Satır Sayısı", f"{len(final):,}")
                     
+                    full_buffer = BytesIO()
+                    final.to_excel(full_buffer, index=False, engine='openpyxl')
+                    full_buffer.seek(0)
+                    
                     st.download_button(
-                        label="📥 Tam Detay CSV İndir",
-                        data=final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name=f"sevkiyat_tam_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
+                        label="📥 Tam Detay Excel İndir",
+                        data=full_buffer.getvalue(),
+                        file_name=f"sevkiyat_tam_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
                         key="rapor_download_full"
                     )
@@ -1706,23 +1833,60 @@ elif menu == "📈 Raporlar":
                 
                 if 'depo_kod' in final.columns:
                     depo_listesi = sorted(final['depo_kod'].unique())
-                    selected_depo = st.selectbox("Depo Seçin", options=['Tümü'] + list(depo_listesi), key="export_depo_select")
+                    selected_depo = st.selectbox("Depo Seçin", options=['Tümü'] + [str(d) for d in depo_listesi], key="export_depo_select")
                     
                     if selected_depo != 'Tümü':
-                        depo_data = final[final['depo_kod'] == selected_depo]
+                        depo_data = final[final['depo_kod'].astype(str) == selected_depo]
                     else:
                         depo_data = final
                     
+                    st.metric("Seçili Satır Sayısı", f"{len(depo_data):,}")
+                    
+                    depo_buffer = BytesIO()
+                    depo_data.to_excel(depo_buffer, index=False, engine='openpyxl')
+                    depo_buffer.seek(0)
+                    
                     st.download_button(
-                        label=f"📥 {selected_depo} Deposu İndir",
-                        data=depo_data.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name=f"sevkiyat_depo_{selected_depo}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
+                        label=f"📥 {selected_depo} Deposu Excel İndir",
+                        data=depo_buffer.getvalue(),
+                        file_name=f"sevkiyat_depo_{selected_depo}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True,
                         key="rapor_download_depo"
                     )
+                
+                # Kolon açıklamaları
+                st.markdown("---")
+                st.markdown("### 📋 Kolon Açıklamaları")
+                with st.expander("Kolonların Anlamları"):
+                    st.markdown("""
+                    | Kolon | Açıklama |
+                    |-------|----------|
+                    | sira_no | Satır numarası |
+                    | oncelik | Öncelik sırası |
+                    | magaza_kod | Mağaza kodu |
+                    | urun_kod | Ürün kodu |
+                    | magaza_segment | Mağaza cover segmenti (Seg_X-Y) |
+                    | urun_segment | Ürün cover segmenti (Seg_X-Y) |
+                    | durum | İhtiyaç türü (RPT/Initial/Min) |
+                    | stok | Mağaza stok adedi |
+                    | yol | Yoldaki miktar |
+                    | satis | Satış adedi |
+                    | Ilk_Nihai_Cover | (stok+yol)/satış |
+                    | ihtiyac_miktari | Hesaplanan ihtiyaç |
+                    | sevkiyat_miktari | Atanan sevkiyat |
+                    | depo_kod | Depo kodu |
+                    | stok_yoklugu_satis_kaybi | Karşılanamayan ihtiyaç |
+                    | KPI_Min | KPI'dan gelen min değer |
+                    | KPI_Max | KPI'dan gelen max değer |
+                    | KPI_Forward_Cover | KPI'dan gelen forward cover |
+                    | Ilk_Depo_Stok | Depo stok (CSV'den) |
+                    | Son_Nihai_Stok | stok+yol+sevkiyat_miktari |
+                    | Son_Nihai_Cover | Son_Nihai_Stok/satış |
+                    """)
             else:
                 st.warning("⚠️ Henüz hesaplama yapılmadı!")
+
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
 # ============================================

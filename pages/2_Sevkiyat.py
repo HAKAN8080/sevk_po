@@ -1508,6 +1508,7 @@ elif menu == "📐 Hesaplama":
             # Status'u güncelle
             status_text.success("✅ Hesaplama tamamlandı!")
             
+            st.info("📊 Detaylı raporlar ve indirme seçenekleri için **Raporlar** menüsüne gidin.")
             
         except Exception as e:
             st.error(f"❌ Hesaplama hatası: {str(e)}")
@@ -1527,20 +1528,15 @@ elif menu == "📈 Raporlar":
         st.info("Lütfen önce 'Hesaplama' menüsünden hesaplama yapın.")
         st.stop()
     
-    # Veriyi session state'ten al (yeniden hesaplama YOK!)
-    result_df = st.session_state.sevkiyat_sonuc.copy()
+    # Veriyi session state'ten al (copy YOK - sadece okuma)
+    result_df = st.session_state.sevkiyat_sonuc
     
-    st.success(f"✅ Hesaplama sonucu yüklendi: {len(result_df):,} satır")
+    st.success(f"✅ Hesaplama sonucu: {len(result_df):,} satır")
     
     # Kolon isimlerini belirle
     sevkiyat_kolon = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
     ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
     kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
-    
-    # Debug expander - opsiyonel
-    with st.expander("🔍 Veri Yapısı (Debug)", expanded=False):
-        st.write("**Kolonlar:**", list(result_df.columns))
-        st.dataframe(result_df.head(5), use_container_width=True)
     
     # TAB'LAR
     tab1, tab2, tab3, tab4, tab5 = st.tabs([

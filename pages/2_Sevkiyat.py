@@ -1596,7 +1596,14 @@ elif menu == "📐 Hesaplama":
                 cover_12_ustu = len(aktif_df[aktif_df['cover'] > 12])
                 cover_4_alti = len(aktif_df[(aktif_df['cover'] < 4) & (aktif_df['cover'] > 0)])
                 ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
-                brut_marj_filtre = brut_kar_filtre_sayisi if brut_kar_aktif else 0
+                
+                # BKM filtresi - sadece aktif noktalar için (Aktif_Nokta = 1)
+                if brut_kar_aktif and 'Aktif_Nokta' in final.columns and 'KPI_Durum' in final.columns:
+                    brut_marj_filtre = len(final[(final['Aktif_Nokta'] == 1) & (final['KPI_Durum'].str.contains('BKM_Filtre', na=False))])
+                elif brut_kar_aktif:
+                    brut_marj_filtre = brut_kar_filtre_sayisi
+                else:
+                    brut_marj_filtre = 0
                 
                 kpi_kontrol_data = {
                     'KPI Metriği': [
@@ -1797,7 +1804,7 @@ elif menu == "📈 Raporlar":
             )
     
     # ============================================
-    # 📥 DIŞA AKTAR TAB - EXCEL FORMATI
+    # 📥 DIŞA AKTAR TAB - CSV FORMATI
     # ============================================
     with tab4:
         st.subheader("📥 Sevkiyat Verilerini İndir")
@@ -1813,18 +1820,14 @@ elif menu == "📈 Raporlar":
             sap_data = final[final['sevkiyat_miktari'] > 0][['magaza_kod', 'urun_kod', 'depo_kod', 'sevkiyat_miktari']]
             st.metric("Satır Sayısı", f"{len(sap_data):,}")
             
-            # Excel olarak indir
-            from io import BytesIO
-            sap_buffer = BytesIO()
-            sap_data.to_excel(sap_buffer, index=False, engine='openpyxl')
-            sap_buffer.seek(0)
+            sap_csv = sap_data.to_csv(index=False, encoding='utf-8-sig', sep=';')
             
             st.download_button(
-                label="📥 SAP Excel İndir",
-                data=sap_buffer.getvalue(),
-                file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="sap_excel_indir"
+                label="📥 SAP CSV İndir",
+                data=sap_csv,
+                file_name=f"sap_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="sap_csv_indir"
             )
         
         with col2:
@@ -1833,49 +1836,17 @@ elif menu == "📈 Raporlar":
             
             st.metric("Satır Sayısı", f"{len(final):,}")
             
-            # Büyük data için CSV seçeneği de sun
-            st.markdown("---")
-            export_format = st.radio("Format seçin:", ["Excel (önerilen)", "CSV (büyük data için)"], key="export_format", horizontal=True)
+            full_csv = final.to_csv(index=False, encoding='utf-8-sig', sep=';')
             
-            if export_format == "Excel (önerilen)":
-                if st.button("📥 Excel Hazırla", key="prepare_excel"):
-                    try:
-                        with st.spinner("Excel hazırlanıyor..."):
-                            from io import BytesIO
-                            full_buffer = BytesIO()
-                            final.to_excel(full_buffer, index=False, engine='openpyxl')
-                            full_buffer.seek(0)
-                            st.session_state['full_excel_data'] = full_buffer.getvalue()
-                        st.success("✅ Excel hazır!")
-                    except Exception as e:
-                        st.error(f"Excel oluşturulamadı: {str(e)}")
-                        st.info("Büyük data için CSV formatını deneyin.")
-                
-                if 'full_excel_data' in st.session_state:
-                    st.download_button(
-                        label="⬇️ Excel İndir",
-                        data=st.session_state['full_excel_data'],
-                        file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="full_excel_indir"
-                    )
-            else:
-                # CSV - cover kolonlarını text olarak formatla
-                csv_final = final.copy()
-                for col in ['Ilk_Nihai_Cover', 'Son_Nihai_Cover', 'KPI_Forward_Cover']:
-                    if col in csv_final.columns:
-                        csv_final[col] = csv_final[col].apply(lambda x: f"'{x:.2f}" if pd.notna(x) else "0")
-                
-                full_csv = csv_final.to_csv(index=False, encoding='utf-8-sig', sep=';')
-                
-                st.download_button(
-                    label="📥 CSV İndir (;)",
-                    data=full_csv,
-                    file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    key="full_csv_indir"
-                )
-                st.caption("Not: CSV dosyası noktalı virgül (;) ile ayrılmıştır.")
+            st.download_button(
+                label="📥 Tam Detay CSV İndir",
+                data=full_csv,
+                file_name=f"sevkiyat_detay_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="full_csv_indir"
+            )
+        
+        st.caption("💡 CSV dosyaları noktalı virgül (;) ile ayrılmıştır. Excel'de Veri > Metinden Al ile açabilirsiniz.")
 
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA

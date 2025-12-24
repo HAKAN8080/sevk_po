@@ -1535,8 +1535,10 @@ elif menu == "📐 Hesaplama":
                 # SADECE AKTİF NOKTALAR (stok > 0 OR satış > 0 OR yol > 0)
                 aktif_df = orijinal_df[(orijinal_df['stok'] > 0) | (orijinal_df['satis'] > 0) | (orijinal_df['yol'] > 0)].copy()
                 
-                # Depo stok > 0 olan ürünleri bul
-                depo_stoklu_urunler = orijinal_depo[orijinal_depo['stok'] > 0]['urun_kod'].astype(str).unique()
+                # Depo stok > 100 olan ürünleri bul (anlamlı sevkiyat yapılabilir)
+                depo_stok_urun = orijinal_depo.groupby('urun_kod')['stok'].sum().reset_index()
+                depo_stok_urun['urun_kod'] = depo_stok_urun['urun_kod'].astype(str)
+                depo_stoklu_urunler = depo_stok_urun[depo_stok_urun['stok'] > 100]['urun_kod'].unique()
                 
                 # Cover hesapla (aktif noktalar için)
                 aktif_df['cover'] = np.where(
@@ -1599,7 +1601,7 @@ elif menu == "📐 Hesaplama":
                 kpi_kontrol_data = {
                     'KPI Metriği': [
                         '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
-                        '⚠️ Min Altında Stok (depo stok > 0)',
+                        '⚠️ Min Altında Stok (depo stok > 100)',
                         '🔴 Maks Üstü Stok Noktası',
                         '📈 Cover > 12 Hafta Nokta Sayısı',
                         '📉 Cover < 4 Hafta Nokta Sayısı',

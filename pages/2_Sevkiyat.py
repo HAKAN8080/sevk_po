@@ -1530,9 +1530,13 @@ elif menu == "📐 Hesaplama":
             try:
                 # KPI hesaplamaları için orijinal veriden hesapla
                 orijinal_df = st.session_state.anlik_stok_satis.copy()
+                orijinal_depo = st.session_state.depo_stok.copy()
                 
                 # SADECE AKTİF NOKTALAR (stok > 0 OR satış > 0 OR yol > 0)
                 aktif_df = orijinal_df[(orijinal_df['stok'] > 0) | (orijinal_df['satis'] > 0) | (orijinal_df['yol'] > 0)].copy()
+                
+                # Depo stok > 0 olan ürünleri bul
+                depo_stoklu_urunler = orijinal_depo[orijinal_depo['stok'] > 0]['urun_kod'].astype(str).unique()
                 
                 # Cover hesapla (aktif noktalar için)
                 aktif_df['cover'] = np.where(
@@ -1544,17 +1548,49 @@ elif menu == "📐 Hesaplama":
                 # Toplam aktif nokta sayısı
                 toplam_nokta_satisi = len(aktif_df)
                 
-                # Min/max kontrolü için KPI'dan değerleri al
-                if st.session_state.kpi is not None and not st.session_state.kpi.empty:
-                    avg_min = st.session_state.kpi['min_deger'].mean() if 'min_deger' in st.session_state.kpi.columns else 0
-                    avg_max = st.session_state.kpi['max_deger'].mean() if 'max_deger' in st.session_state.kpi.columns else 999999
+                # Min/max kontrolü için KPI'dan değerleri al (ürün-mağaza bazında)
+                # Basitleştirme: final df'den KPI_Min ve KPI_Max kullan
+                if 'KPI_Min' in final.columns and 'KPI_Max' in final.columns:
+                    # Final'den min/max ile birleştir
+                    aktif_df['urun_kod'] = aktif_df['urun_kod'].astype(str)
+                    aktif_df['magaza_kod'] = aktif_df['magaza_kod'].astype(str)
+                    
+                    kpi_lookup = final[['magaza_kod', 'urun_kod', 'KPI_Min', 'KPI_Max']].drop_duplicates()
+                    kpi_lookup['magaza_kod'] = kpi_lookup['magaza_kod'].astype(str)
+                    kpi_lookup['urun_kod'] = kpi_lookup['urun_kod'].astype(str)
+                    
+                    aktif_df = aktif_df.merge(kpi_lookup, on=['magaza_kod', 'urun_kod'], how='left')
+                    aktif_df['KPI_Min'] = aktif_df['KPI_Min'].fillna(0)
+                    aktif_df['KPI_Max'] = aktif_df['KPI_Max'].fillna(999999)
+                    
+                    # Min altı: (stok+yol) < KPI_Min VE depo stok > 0
+                    aktif_df['depo_stoklu'] = aktif_df['urun_kod'].isin(depo_stoklu_urunler)
+                    min_alti_stok = len(aktif_df[
+                        ((aktif_df['stok'] + aktif_df['yol']) < aktif_df['KPI_Min']) & 
+                        (aktif_df['depo_stoklu'] == True)
+                    ])
+                    
+                    # Maks üstü: (stok+yol) > KPI_Max
+                    maks_ustu_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) > aktif_df['KPI_Max']])
                 else:
-                    avg_min = 0
-                    avg_max = 999999
+                    # Fallback: ortalama min/max kullan
+                    if st.session_state.kpi is not None and not st.session_state.kpi.empty:
+                        avg_min = st.session_state.kpi['min_deger'].mean() if 'min_deger' in st.session_state.kpi.columns else 0
+                        avg_max = st.session_state.kpi['max_deger'].mean() if 'max_deger' in st.session_state.kpi.columns else 999999
+                    else:
+                        avg_min = 0
+                        avg_max = 999999
+                    
+                    aktif_df['urun_kod'] = aktif_df['urun_kod'].astype(str)
+                    aktif_df['depo_stoklu'] = aktif_df['urun_kod'].isin(depo_stoklu_urunler)
+                    
+                    min_alti_stok = len(aktif_df[
+                        ((aktif_df['stok'] + aktif_df['yol']) < avg_min) & 
+                        (aktif_df['depo_stoklu'] == True)
+                    ])
+                    maks_ustu_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) > avg_max])
                 
-                # TÜM KPI METRİKLERİ AKTİF NOKTALARDAN HESAPLANIYOR
-                min_alti_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) < avg_min])
-                maks_ustu_stok = len(aktif_df[(aktif_df['stok'] + aktif_df['yol']) > avg_max])
+                # Diğer metrikler
                 cover_12_ustu = len(aktif_df[aktif_df['cover'] > 12])
                 cover_4_alti = len(aktif_df[(aktif_df['cover'] < 4) & (aktif_df['cover'] > 0)])
                 ihtiyac_100_sevk_0 = len(final[(final['ihtiyac_miktari'] > 100) & (final['sevkiyat_miktari'] == 0)])
@@ -1563,7 +1599,7 @@ elif menu == "📐 Hesaplama":
                 kpi_kontrol_data = {
                     'KPI Metriği': [
                         '📊 Toplam Aktif Nokta (stok/satış/yol > 0)',
-                        '⚠️ Min Altında Stok Noktası',
+                        '⚠️ Min Altında Stok (depo stok > 0)',
                         '🔴 Maks Üstü Stok Noktası',
                         '📈 Cover > 12 Hafta Nokta Sayısı',
                         '📉 Cover < 4 Hafta Nokta Sayısı',

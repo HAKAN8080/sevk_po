@@ -89,10 +89,10 @@ if menu == "🏠 Ana Sayfa":
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➡️ Veri Yükleme Sayfasına Git", use_container_width=True):
+        if st.button("➡️ Veri Yükleme Sayfasına Git", width='stretch'):
             st.switch_page("pages/0_Veri_Yukleme.py")
     with col2:
-        if st.button("➡️ Alım Sipariş Sayfasına Git", use_container_width=True):
+        if st.button("➡️ Alım Sipariş Sayfasına Git", width='stretch'):
             st.switch_page("pages/4_PO.py")
     
     st.markdown("---")
@@ -377,7 +377,7 @@ elif menu == "🎲 Hedef Matris":
         sisme_display,
         key="editor_sisme_v1",
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         num_rows="fixed",
         disabled=["Mağaza↓ / Ürün→"]  # İlk sütun düzenlenemez
     )
@@ -402,7 +402,7 @@ elif menu == "🎲 Hedef Matris":
         genles_display,
         key="editor_genles_v1",
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         num_rows="fixed",
         disabled=["Mağaza↓ / Ürün→"]
     )
@@ -427,7 +427,7 @@ elif menu == "🎲 Hedef Matris":
         min_display,
         key="editor_min_v1",
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         num_rows="fixed",
         disabled=["Mağaza↓ / Ürün→"]
     )
@@ -452,7 +452,7 @@ elif menu == "🎲 Hedef Matris":
         initial_display,
         key="editor_initial_v1",
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         num_rows="fixed",
         disabled=["Mağaza↓ / Ürün→"]
     )
@@ -467,7 +467,7 @@ elif menu == "🎲 Hedef Matris":
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        if st.button("💾 KAYDET", type="primary", use_container_width=True, key="save_matrices_btn"):
+        if st.button("💾 KAYDET", type="primary", width='stretch', key="save_matrices_btn"):
             try:
                 # Düzenlenmiş dataframe'leri index'e çevir ve kaydet
                 st.session_state.sisme_orani = edited_sisme.set_index('Mağaza↓ / Ürün→')
@@ -669,7 +669,7 @@ elif menu == "🔢 Sıralama":
             )
         },
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         key="siralama_editor"
     )
     
@@ -679,7 +679,7 @@ elif menu == "🔢 Sıralama":
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        if st.button("💾 KAYDET", type="primary", use_container_width=True):
+        if st.button("💾 KAYDET", type="primary", width='stretch'):
             # Validasyon: Her satırda aynı değer tekrar etmemeli
             valid = True
             error_rows = []
@@ -725,7 +725,7 @@ elif menu == "🔢 Sıralama":
             })
         
         preview_df = pd.DataFrame(preview_data)
-        st.dataframe(preview_df, use_container_width=True, hide_index=True, height=250)
+        st.dataframe(preview_df, width='stretch', hide_index=True, height=250)
         
         # JSON export
         with st.expander("📥 JSON Formatında İndir"):
@@ -838,28 +838,90 @@ elif menu == "📐 Hesaplama":
     st.markdown("---")
     
     # Hesapla Butonu
-    if st.button("🚀 HESAPLA", type="primary", use_container_width=True):
+    if st.button("🚀 HESAPLA", type="primary", width='stretch'):
         baslaangic_zamani = time.time()
         
         try:
             # ============================================
-            # 1. VERİ HAZIRLA
+            # 0. VERİ KALİTE KONTROLÜ
             # ============================================
             status_text = st.empty()
+            status_text.info("🔍 Veri kalitesi kontrol ediliyor...")
+            
+            # Zorunlu kolonları kontrol et
+            anlik_zorunlu = ['urun_kod', 'magaza_kod', 'stok', 'yol', 'satis']
+            depo_zorunlu = ['urun_kod', 'depo_kod', 'stok']
+            magaza_zorunlu = ['magaza_kod', 'depo_kod']
+            kpi_zorunlu = ['mg_id']
+            
+            hatalar = []
+            
+            # Anlık stok/satış kontrolü
+            anlik_df = st.session_state.anlik_stok_satis
+            if anlik_df is None or anlik_df.empty:
+                hatalar.append("❌ Anlık Stok/Satış verisi boş!")
+            else:
+                eksik_kolonlar = [k for k in anlik_zorunlu if k not in anlik_df.columns]
+                if eksik_kolonlar:
+                    hatalar.append(f"❌ Anlık Stok/Satış'ta eksik kolonlar: {eksik_kolonlar}")
+                # Sayısal kolonları kontrol et
+                for col in ['stok', 'yol', 'satis']:
+                    if col in anlik_df.columns:
+                        if not pd.api.types.is_numeric_dtype(anlik_df[col]):
+                            try:
+                                pd.to_numeric(anlik_df[col], errors='coerce')
+                            except:
+                                hatalar.append(f"❌ '{col}' kolonu sayısal değil!")
+            
+            # Depo stok kontrolü
+            depo_df_check = st.session_state.depo_stok
+            if depo_df_check is None or depo_df_check.empty:
+                hatalar.append("❌ Depo Stok verisi boş!")
+            else:
+                eksik_kolonlar = [k for k in depo_zorunlu if k not in depo_df_check.columns]
+                if eksik_kolonlar:
+                    hatalar.append(f"❌ Depo Stok'ta eksik kolonlar: {eksik_kolonlar}")
+            
+            # Mağaza master kontrolü
+            magaza_df_check = st.session_state.magaza_master
+            if magaza_df_check is None or magaza_df_check.empty:
+                hatalar.append("❌ Mağaza Master verisi boş!")
+            else:
+                eksik_kolonlar = [k for k in magaza_zorunlu if k not in magaza_df_check.columns]
+                if eksik_kolonlar:
+                    hatalar.append(f"❌ Mağaza Master'da eksik kolonlar: {eksik_kolonlar}")
+            
+            # Hata varsa dur
+            if hatalar:
+                for hata in hatalar:
+                    st.error(hata)
+                st.warning("⚠️ Lütfen Veri Yükleme sayfasından verileri kontrol edin!")
+                st.stop()
+            
+            st.success("✅ Veri kalitesi OK!")
+            
+            # ============================================
+            # 1. VERİ HAZIRLA
+            # ============================================
             status_text.info("📂 Veriler hazırlanıyor...")
             
             df = st.session_state.anlik_stok_satis.copy()
             df['urun_kod'] = df['urun_kod'].astype(str)
             df['magaza_kod'] = df['magaza_kod'].astype(str)
             
+            # Sayısal kolonları zorla dönüştür
+            for col in ['stok', 'yol', 'satis']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
             depo_df = st.session_state.depo_stok.copy()
             depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
-            depo_df['depo_kod'] = depo_df['depo_kod'].astype(int)
+            depo_df['depo_kod'] = pd.to_numeric(depo_df['depo_kod'], errors='coerce').fillna(0).astype(int)
+            depo_df['stok'] = pd.to_numeric(depo_df['stok'], errors='coerce').fillna(0)
             
             magaza_df = st.session_state.magaza_master.copy()
             magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
             
-            kpi_df = st.session_state.kpi.copy()
+            kpi_df = st.session_state.kpi.copy() if st.session_state.kpi is not None else pd.DataFrame()
             
             st.write(f"✅ Anlık stok/satış: {len(df):,} satır")
             st.write(f"✅ Depo stok: {len(depo_df):,} satır")
@@ -1496,7 +1558,7 @@ elif menu == "📐 Hesaplama":
             with col1:
                 st.dataframe(
                     ozet_df,
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True,
                     height=380
                 )
@@ -1636,7 +1698,7 @@ elif menu == "📐 Hesaplama":
                 }
                 
                 kpi_kontrol_df = pd.DataFrame(kpi_kontrol_data)
-                st.dataframe(kpi_kontrol_df, use_container_width=True, hide_index=True, height=300)
+                st.dataframe(kpi_kontrol_df, width='stretch', hide_index=True, height=300)
             except Exception as kpi_err:
                 st.warning(f"⚠️ KPI tablosu oluşturulamadı: {str(kpi_err)}")
             
@@ -1787,7 +1849,7 @@ elif menu == "📈 Raporlar":
             
             # Sıralı tablo göster
             il_siralama = il_bazinda.sort_values('Toplam Sevkiyat', ascending=False)
-            st.dataframe(il_siralama, use_container_width=True, hide_index=True, height=400)
+            st.dataframe(il_siralama, width='stretch', hide_index=True, height=400)
             
             # İl bazlı indirme
             from io import BytesIO

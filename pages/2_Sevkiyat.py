@@ -1137,15 +1137,22 @@ elif menu == "📐 Hesaplama":
                 st.success("✅ Matris değerleri uygulandı!")
             
             # ============================================
-            # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI ✅
+            # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI ✅ + MAX DEGER KONTROLÜ
             # ============================================
-            st.info("📊 İhtiyaçlar hesaplanıyor (MAX yaklaşımı)...")
+            st.info("📊 İhtiyaçlar hesaplanıyor (MAX yaklaşımı + Max Değer Kontrolü)...")
             
-            # Her ürün-mağaza için 3 farklı ihtiyaç hesapla
-            df['rpt_ihtiyac'] = (
-                default_fc * df['satis'] * df['genlestirme']
-            ) - (df['stok'] + df['yol'])
+            # ⭐ KRİTİK DÜZELTME: RPT hesabında hedef stok MAX değeri aşmamalı!
+            # Önce RAW hedef stoğu hesapla
+            df['hedef_stok_raw'] = default_fc * df['satis'] * df['genlestirme']
             
+            # Hedef stok = MIN(raw_hedef, max_deger)
+            # Bu sayede mağaza kapasitesi korunur!
+            df['hedef_stok'] = df[['hedef_stok_raw', 'max_deger']].min(axis=1)
+            
+            # RPT ihtiyacı = hedef_stok - (stok + yol)
+            df['rpt_ihtiyac'] = df['hedef_stok'] - (df['stok'] + df['yol'])
+            
+            # Min ihtiyacı
             df['min_ihtiyac'] = (
                 df['min_oran'] * df['min_deger']
             ) - (df['stok'] + df['yol'])
@@ -1165,6 +1172,12 @@ elif menu == "📐 Hesaplama":
             
             # ✅ MAX'I AL - TEK İHTİYAÇ
             df['ihtiyac'] = df[['rpt_ihtiyac', 'min_ihtiyac', 'initial_ihtiyac']].max(axis=1)
+            
+            # MAX tarafından sınırlanan satırları say ve raporla
+            max_sinirli = (df['hedef_stok'] < df['hedef_stok_raw']).sum()
+            if max_sinirli > 0:
+                st.warning(f"⚠️ {max_sinirli:,} satırda hedef stok MAX DEĞER tarafından sınırlandı (mağaza kapasitesi korundu)")
+                st.caption(f"💡 Bu satırlarda sevkiyat miktarı, mağaza max kapasitesini aşmamak için düşürüldü")
             
             # ============================================
             # 7.5 BRÜT KAR FİLTRESİ UYGULA

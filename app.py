@@ -83,10 +83,10 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     with st.container():
-        st.markdown("#### 📉 Lost Sales")
-        st.caption("Kayıp satış analizi")
-        if st.button("🔍 Lost Sales", use_container_width=True, key="lost"):
-            st.switch_page("pages/1_Lost_Sales.py")
+        st.markdown("#### 🔄 Otomatik Transfer")
+        st.caption("Mağazalar arası akıllı stok transferi")
+        if st.button("🔄 Otomatik Transfer", use_container_width=True, key="transfer"):
+            st.switch_page("pages/1_Otomatik_Transfer.py")
 
 with col2:
     with st.container():

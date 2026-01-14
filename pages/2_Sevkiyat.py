@@ -1010,18 +1010,26 @@ elif menu == "📐 Hesaplama":
                 if toplam_depo_stok > 300:
                     eksik_urunler_filtered.append(urun)
 
-            # Yasak kontrolü
-            if st.session_state.yasak_master is not None and 'urun_kod' in st.session_state.yasak_master.columns:
-                yasak_urunler = set(st.session_state.yasak_master['urun_kod'].astype(str).str.strip().unique())
-                eksik_urunler_filtered = [u for u in eksik_urunler_filtered if u not in yasak_urunler]
+            # Yasak set'i oluştur (urun_kod, magaza_kod) tuple'ları
+            yasak_set = set()
+            if (st.session_state.yasak_master is not None and
+                'urun_kod' in st.session_state.yasak_master.columns and
+                'magaza_kod' in st.session_state.yasak_master.columns):
+                yasak_df = st.session_state.yasak_master.copy()
+                yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str).str.strip()
+                yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str).str.strip()
+                yasak_set = set(zip(yasak_df['urun_kod'], yasak_df['magaza_kod']))
 
-            # Tüm mağazalara satır oluştur
+            # Tüm mağazalara satır oluştur (yasaklı kombinasyonlar hariç)
             if len(eksik_urunler_filtered) > 0:
                 tum_magazalar = magaza_df['magaza_kod'].astype(str).unique()
 
                 yeni_satirlar = []
                 for urun in eksik_urunler_filtered:
                     for magaza in tum_magazalar:
+                        # Yasak kombinasyonu atla
+                        if (str(urun).strip(), str(magaza).strip()) in yasak_set:
+                            continue
                         yeni_satirlar.append({
                             'urun_kod': str(urun),
                             'magaza_kod': str(magaza),
@@ -1040,6 +1048,11 @@ elif menu == "📐 Hesaplama":
 
                     df = pd.concat([df, yeni_df], ignore_index=True)
                     st.write(f"🆕 {len(eksik_urunler_filtered)} yeni ürün için {len(tum_magazalar)} mağazaya otomatik satır eklendi")
+
+                    # Eksik ürünleri yeni_urunler listesine ekle (initial ihtiyaç için)
+                    for urun in eksik_urunler_filtered:
+                        if urun not in yeni_urunler:
+                            yeni_urunler.append(urun)
 
             # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
             if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
@@ -1089,28 +1102,30 @@ elif menu == "📐 Hesaplama":
             # MG bilgisi ekle
             if st.session_state.urun_master is not None and 'mg' in st.session_state.urun_master.columns:
                 urun_m = st.session_state.urun_master[['urun_kod', 'mg']].copy()
-                urun_m['urun_kod'] = urun_m['urun_kod'].astype(str)
-                urun_m['mg'] = urun_m['mg'].fillna('0').astype(str)
+                urun_m['urun_kod'] = urun_m['urun_kod'].astype(str).str.strip()
+                urun_m['mg'] = urun_m['mg'].fillna('0').astype(str).str.strip()
+                df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
                 df = df.merge(urun_m, on='urun_kod', how='left')
-                df['mg'] = df['mg'].fillna('0')
+                df['mg'] = df['mg'].fillna('0').str.strip()
             else:
                 df['mg'] = '0'
-            
+
             # KPI değerlerini uygula
             if not kpi_df.empty and 'mg_id' in kpi_df.columns:
                 kpi_lookup = {}
                 for _, row in kpi_df.iterrows():
-                    mg_key = str(row['mg_id'])
+                    mg_key = str(row['mg_id']).strip()
                     kpi_lookup[mg_key] = {
                         'min': float(row.get('min_deger', 0)) if pd.notna(row.get('min_deger', 0)) else 0,
                         'max': float(row.get('max_deger', 999999)) if pd.notna(row.get('max_deger', 999999)) else 999999
                     }
-                
+
                 for mg_val in df['mg'].unique():
-                    if mg_val in kpi_lookup:
+                    mg_val_stripped = str(mg_val).strip()
+                    if mg_val_stripped in kpi_lookup:
                         mask = df['mg'] == mg_val
-                        df.loc[mask, 'min_deger'] = kpi_lookup[mg_val]['min']
-                        df.loc[mask, 'max_deger'] = kpi_lookup[mg_val]['max']
+                        df.loc[mask, 'min_deger'] = kpi_lookup[mg_val_stripped]['min']
+                        df.loc[mask, 'max_deger'] = kpi_lookup[mg_val_stripped]['max']
             
             # ============================================
             # 5. DEPO KODU EKLEMESİ
@@ -1254,21 +1269,25 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # 8. YASAK KONTROL
             # ============================================
-            if (st.session_state.yasak_master is not None and 
+            if (st.session_state.yasak_master is not None and
                 'urun_kod' in st.session_state.yasak_master.columns and
                 'magaza_kod' in st.session_state.yasak_master.columns):
-                
+
                 yasak = st.session_state.yasak_master.copy()
                 yasak['urun_kod'] = yasak['urun_kod'].astype(str).str.strip()
                 yasak['magaza_kod'] = yasak['magaza_kod'].astype(str).str.strip()
-                
+
+                # df'deki kodları da strip et (merge için gerekli)
+                df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
+                df['magaza_kod'] = df['magaza_kod'].astype(str).str.strip()
+
                 if 'yasak_durum' in yasak.columns:
                     df = df.merge(
                         yasak[['urun_kod', 'magaza_kod', 'yasak_durum']],
                         on=['urun_kod', 'magaza_kod'], how='left'
                     )
-                    # Hem 1 hem "Yasak" değerini kabul et
-                    df.loc[(df['yasak_durum'] == 1) | (df['yasak_durum'] == '1') | (df['yasak_durum'] == 'Yasak'), 'ihtiyac'] = 0
+                    # Hem 1, 1.0, "1" hem "Yasak" değerini kabul et
+                    df.loc[(df['yasak_durum'] == 1) | (df['yasak_durum'] == 1.0) | (df['yasak_durum'] == '1') | (df['yasak_durum'] == 'Yasak'), 'ihtiyac'] = 0
                     df.drop('yasak_durum', axis=1, inplace=True, errors='ignore')
             
             # ============================================

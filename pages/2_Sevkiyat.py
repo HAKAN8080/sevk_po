@@ -1566,7 +1566,46 @@ elif menu == "📐 Hesaplama":
             # Sıra numaraları
             final.insert(0, 'sira_no', range(1, len(final) + 1))
             final.insert(1, 'oncelik', range(1, len(final) + 1))
-            
+
+            # ============================================
+            # SON YASAK KONTROLÜ - TÜM HESAPLAMALAR BİTTİKTEN SONRA
+            # ============================================
+            if (st.session_state.yasak_master is not None and
+                'urun_kod' in st.session_state.yasak_master.columns and
+                'magaza_kod' in st.session_state.yasak_master.columns and
+                'yasak_durum' in st.session_state.yasak_master.columns):
+
+                yasak_df = st.session_state.yasak_master.copy()
+                yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str).str.strip()
+                yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str).str.strip()
+
+                # Yasak durumu 1 olanları filtrele
+                yasak_aktif = yasak_df[
+                    (yasak_df['yasak_durum'] == 1) |
+                    (yasak_df['yasak_durum'] == '1') |
+                    (yasak_df['yasak_durum'] == 1.0)
+                ]
+
+                # Yasak set oluştur
+                yasak_set = set(zip(yasak_aktif['urun_kod'], yasak_aktif['magaza_kod']))
+
+                # Final'de urun_kod ve magaza_kod'u strip et
+                final['urun_kod'] = final['urun_kod'].astype(str).str.strip()
+                final['magaza_kod'] = final['magaza_kod'].astype(str).str.strip()
+
+                # Yasaklı kombinasyonların sevkiyatını sıfırla
+                yasak_mask = final.apply(
+                    lambda row: (str(row['urun_kod']).strip(), str(row['magaza_kod']).strip()) in yasak_set,
+                    axis=1
+                )
+                yasak_sayisi = yasak_mask.sum()
+
+                if yasak_sayisi > 0:
+                    final.loc[yasak_mask, 'sevkiyat_miktari'] = 0
+                    if 'Sevkiyat_Paket_Adet' in final.columns:
+                        final.loc[yasak_mask, 'Sevkiyat_Paket_Adet'] = 0
+                    st.warning(f"🚫 YASAK KONTROLÜ: {yasak_sayisi:,} satırın sevkiyatı sıfırlandı (yasaklı ürün+mağaza)")
+
             # KAYDET
             st.session_state.sevkiyat_sonuc = final
             
@@ -1995,3 +2034,4 @@ elif menu == "💾 Master Data":
     st.markdown("---")
     
     st.warning("🚧 **Master Data modülü yakında yayında!** 🚧")
+s

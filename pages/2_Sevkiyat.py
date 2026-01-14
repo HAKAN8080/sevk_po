@@ -995,7 +995,51 @@ elif menu == "📐 Hesaplama":
             
             st.write(f"✅ Yeni ürün adayı: {len(yeni_urunler):,}")
 
+            # ============================================
+            # 2.5. HİÇ MAĞAZAYA GİTMEMİŞ YENİ ÜRÜNLER EKLE
+            # ============================================
+            # Depo'da olup anlık_stok_satis'ta hiç olmayan ürünleri bul
+            urunler_depoda = set(depo_df['urun_kod'].astype(str).unique())
+            urunler_dfde = set(df['urun_kod'].astype(str).unique())
+            eksik_urunler = urunler_depoda - urunler_dfde
 
+            # Depo stok > 300 olanları filtrele
+            eksik_urunler_filtered = []
+            for urun in eksik_urunler:
+                toplam_depo_stok = depo_sum.get(urun, 0)
+                if toplam_depo_stok > 300:
+                    eksik_urunler_filtered.append(urun)
+
+            # Yasak kontrolü
+            if st.session_state.yasak_master is not None and 'urun_kod' in st.session_state.yasak_master.columns:
+                yasak_urunler = set(st.session_state.yasak_master['urun_kod'].astype(str).unique())
+                eksik_urunler_filtered = [u for u in eksik_urunler_filtered if u not in yasak_urunler]
+
+            # Tüm mağazalara satır oluştur
+            if len(eksik_urunler_filtered) > 0:
+                tum_magazalar = magaza_df['magaza_kod'].astype(str).unique()
+
+                yeni_satirlar = []
+                for urun in eksik_urunler_filtered:
+                    for magaza in tum_magazalar:
+                        yeni_satirlar.append({
+                            'urun_kod': str(urun),
+                            'magaza_kod': str(magaza),
+                            'stok': 0,
+                            'yol': 0,
+                            'satis': 0,
+                            'ciro': 0.0,
+                            'smm': 0.0 if 'smm' in df.columns else None
+                        })
+
+                if yeni_satirlar:
+                    yeni_df = pd.DataFrame(yeni_satirlar)
+                    # smm kolonu yoksa çıkar
+                    if 'smm' not in df.columns and 'smm' in yeni_df.columns:
+                        yeni_df = yeni_df.drop('smm', axis=1)
+
+                    df = pd.concat([df, yeni_df], ignore_index=True)
+                    st.write(f"🆕 {len(eksik_urunler_filtered)} yeni ürün için {len(tum_magazalar)} mağazaya otomatik satır eklendi")
 
             # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
             if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
@@ -1220,10 +1264,11 @@ elif menu == "📐 Hesaplama":
                 
                 if 'yasak_durum' in yasak.columns:
                     df = df.merge(
-                        yasak[['urun_kod', 'magaza_kod', 'yasak_durum']], 
+                        yasak[['urun_kod', 'magaza_kod', 'yasak_durum']],
                         on=['urun_kod', 'magaza_kod'], how='left'
                     )
-                    df.loc[df['yasak_durum'] == 'Yasak', 'ihtiyac'] = 0
+                    # Hem 1 hem "Yasak" değerini kabul et
+                    df.loc[(df['yasak_durum'] == 1) | (df['yasak_durum'] == '1') | (df['yasak_durum'] == 'Yasak'), 'ihtiyac'] = 0
                     df.drop('yasak_durum', axis=1, inplace=True, errors='ignore')
             
             # ============================================

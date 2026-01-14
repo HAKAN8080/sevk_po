@@ -840,7 +840,20 @@ elif menu == "📐 Hesaplama":
     # Hesapla Butonu
     if st.button("🚀 HESAPLA", type="primary", width='stretch'):
         baslaangic_zamani = time.time()
-        
+
+        # ===== YASAK DEBUG - EN BAŞTA =====
+        st.write("=" * 50)
+        st.write("🔴 YASAK VERİSİ KONTROLÜ 🔴")
+        yasak_test = st.session_state.get('yasak_master', None)
+        if yasak_test is not None:
+            st.success(f"✅ Yasak verisi YÜKLÜ - {len(yasak_test)} satır")
+            st.write(f"Sütunlar: {list(yasak_test.columns)}")
+            st.write("İlk 3 satır:")
+            st.dataframe(yasak_test.head(3))
+        else:
+            st.error("❌ YASAK VERİSİ YÜKLENMEMİŞ! Veri Yükleme sayfasından yasak.csv yükleyin!")
+        st.write("=" * 50)
+
         try:
             # ============================================
             # 0. VERİ KALİTE KONTROLÜ

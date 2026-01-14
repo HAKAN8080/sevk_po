@@ -1570,41 +1570,69 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # SON YASAK KONTROLÜ - TÜM HESAPLAMALAR BİTTİKTEN SONRA
             # ============================================
-            if (st.session_state.yasak_master is not None and
-                'urun_kod' in st.session_state.yasak_master.columns and
-                'magaza_kod' in st.session_state.yasak_master.columns and
-                'yasak_durum' in st.session_state.yasak_master.columns):
+            st.info("🔍 Yasak kontrolü başlıyor...")
 
-                yasak_df = st.session_state.yasak_master.copy()
-                yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str).str.strip()
-                yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str).str.strip()
+            yasak_master = st.session_state.get('yasak_master', None)
 
-                # Yasak durumu 1 olanları filtrele
-                yasak_aktif = yasak_df[
-                    (yasak_df['yasak_durum'] == 1) |
-                    (yasak_df['yasak_durum'] == '1') |
-                    (yasak_df['yasak_durum'] == 1.0)
-                ]
+            if yasak_master is not None and len(yasak_master) > 0:
+                st.write(f"📋 Yasak listesi yüklü: {len(yasak_master)} kayıt")
+                st.write(f"📋 Yasak sütunları: {list(yasak_master.columns)}")
 
-                # Yasak set oluştur
-                yasak_set = set(zip(yasak_aktif['urun_kod'], yasak_aktif['magaza_kod']))
+                yasak_df = yasak_master.copy()
 
-                # Final'de urun_kod ve magaza_kod'u strip et
-                final['urun_kod'] = final['urun_kod'].astype(str).str.strip()
-                final['magaza_kod'] = final['magaza_kod'].astype(str).str.strip()
+                # Sütun isimlerini kontrol et ve düzelt
+                yasak_df.columns = yasak_df.columns.str.strip().str.lower()
 
-                # Yasaklı kombinasyonların sevkiyatını sıfırla
-                yasak_mask = final.apply(
-                    lambda row: (str(row['urun_kod']).strip(), str(row['magaza_kod']).strip()) in yasak_set,
-                    axis=1
-                )
-                yasak_sayisi = yasak_mask.sum()
+                if 'urun_kod' in yasak_df.columns and 'magaza_kod' in yasak_df.columns:
+                    yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str).str.strip()
+                    yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str).str.strip()
 
-                if yasak_sayisi > 0:
-                    final.loc[yasak_mask, 'sevkiyat_miktari'] = 0
-                    if 'Sevkiyat_Paket_Adet' in final.columns:
-                        final.loc[yasak_mask, 'Sevkiyat_Paket_Adet'] = 0
-                    st.warning(f"🚫 YASAK KONTROLÜ: {yasak_sayisi:,} satırın sevkiyatı sıfırlandı (yasaklı ürün+mağaza)")
+                    # Yasak durumu kontrolü - sütun varsa filtrele, yoksa tümünü al
+                    if 'yasak_durum' in yasak_df.columns:
+                        yasak_df['yasak_durum'] = pd.to_numeric(yasak_df['yasak_durum'], errors='coerce').fillna(0)
+                        yasak_aktif = yasak_df[yasak_df['yasak_durum'] >= 1]
+                    else:
+                        yasak_aktif = yasak_df  # yasak_durum yoksa tümü yasaklı kabul et
+
+                    st.write(f"🚫 Aktif yasak sayısı: {len(yasak_aktif)}")
+
+                    if len(yasak_aktif) > 0:
+                        # Yasak set oluştur
+                        yasak_set = set(zip(yasak_aktif['urun_kod'], yasak_aktif['magaza_kod']))
+
+                        # Final'de urun_kod ve magaza_kod'u strip et
+                        final['urun_kod'] = final['urun_kod'].astype(str).str.strip()
+                        final['magaza_kod'] = final['magaza_kod'].astype(str).str.strip()
+
+                        # Debug: Test ürünü kontrol et
+                        test_urun = '10027317001'
+                        test_magaza = '9037'
+                        if (test_urun, test_magaza) in yasak_set:
+                            st.write(f"✅ TEST: ({test_urun}, {test_magaza}) yasak setinde VAR")
+                        else:
+                            st.write(f"❌ TEST: ({test_urun}, {test_magaza}) yasak setinde YOK")
+                            st.write(f"Yasak set örnekleri: {list(yasak_set)[:5]}")
+
+                        # Yasaklı kombinasyonların sevkiyatını sıfırla
+                        yasak_mask = final.apply(
+                            lambda row: (str(row['urun_kod']).strip(), str(row['magaza_kod']).strip()) in yasak_set,
+                            axis=1
+                        )
+                        yasak_sayisi = yasak_mask.sum()
+
+                        st.write(f"🎯 Final'de eşleşen yasak satır sayısı: {yasak_sayisi}")
+
+                        if yasak_sayisi > 0:
+                            final.loc[yasak_mask, 'sevkiyat_miktari'] = 0
+                            if 'Sevkiyat_Paket_Adet' in final.columns:
+                                final.loc[yasak_mask, 'Sevkiyat_Paket_Adet'] = 0
+                            st.warning(f"🚫 YASAK KONTROLÜ: {yasak_sayisi:,} satırın sevkiyatı sıfırlandı!")
+                        else:
+                            st.info("ℹ️ Sevkiyat listesinde yasaklı ürün+mağaza kombinasyonu bulunamadı")
+                else:
+                    st.error(f"❌ Yasak dosyasında gerekli sütunlar yok! Mevcut: {list(yasak_df.columns)}")
+            else:
+                st.warning("⚠️ Yasak listesi yüklenmemiş veya boş!")
 
             # KAYDET
             st.session_state.sevkiyat_sonuc = final
@@ -2034,4 +2062,3 @@ elif menu == "💾 Master Data":
     st.markdown("---")
     
     st.warning("🚧 **Master Data modülü yakında yayında!** 🚧")
-s

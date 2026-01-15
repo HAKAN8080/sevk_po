@@ -681,8 +681,14 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
                     how='left'
                 )
                 st.write("🔄 [DEBUG] Veren depo stok eklendi")
+                st.write(f"   transfer_df sütunları: {list(transfer_df.columns)}")
 
+                st.write("🔄 [DEBUG] Alan depo stok hazırlanıyor...")
+                st.write(f"   depo_stok sütunları: {list(depo_stok.columns)}")
                 depo_stok_alan = depo_stok.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
+                st.write(f"   depo_stok_alan sütunları: {list(depo_stok_alan.columns)}")
+
+                st.write("🔄 [DEBUG] Alan depo stok merge yapılıyor...")
                 transfer_df = transfer_df.merge(
                     depo_stok_alan[['alan_depo_kod', 'urun_kod', 'alan_depo_stok']],
                     on=['alan_depo_kod', 'urun_kod'],

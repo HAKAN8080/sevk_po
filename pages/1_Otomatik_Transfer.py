@@ -654,15 +654,24 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
         try:
             if 'depo_kod' in magaza_master.columns and 'depo_kod' in depo_stok.columns:
                 st.write("🔄 [DEBUG] Depo bilgisi ekleniyor...")
+                st.write(f"   transfer_df satır: {len(transfer_df)}, sütunlar: {list(transfer_df.columns)[:5]}...")
+                st.write(f"   magaza_master satır: {len(magaza_master)}")
+
                 # Veren mağazanın depo kodunu al
-                veren_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'veren_magaza', 'depo_kod': 'veren_depo_kod'})
+                st.write("🔄 [DEBUG] veren_depo oluşturuluyor...")
+                veren_depo = magaza_master[['magaza_kod', 'depo_kod']].drop_duplicates()
+                veren_depo = veren_depo.rename(columns={'magaza_kod': 'veren_magaza', 'depo_kod': 'veren_depo_kod'})
+                st.write(f"   veren_depo satır: {len(veren_depo)}")
+
+                st.write("🔄 [DEBUG] merge yapılıyor...")
                 transfer_df = transfer_df.merge(veren_depo, on='veren_magaza', how='left')
-                st.write("🔄 [DEBUG] Veren depo eklendi")
+                st.write(f"🔄 [DEBUG] Veren depo eklendi, yeni satır: {len(transfer_df)}")
 
                 # Alan mağazanın depo kodunu al
-                alan_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'alan_magaza', 'depo_kod': 'alan_depo_kod'})
+                alan_depo = magaza_master[['magaza_kod', 'depo_kod']].drop_duplicates()
+                alan_depo = alan_depo.rename(columns={'magaza_kod': 'alan_magaza', 'depo_kod': 'alan_depo_kod'})
                 transfer_df = transfer_df.merge(alan_depo, on='alan_magaza', how='left')
-                st.write("🔄 [DEBUG] Alan depo eklendi")
+                st.write(f"🔄 [DEBUG] Alan depo eklendi, satır: {len(transfer_df)}")
 
                 # Depo stok miktarlarını ekle
                 depo_stok_veren = depo_stok.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})

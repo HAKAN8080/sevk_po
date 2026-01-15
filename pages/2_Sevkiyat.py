@@ -841,25 +841,24 @@ elif menu == "📐 Hesaplama":
     if st.button("🚀 HESAPLA", type="primary", width='stretch'):
         baslaangic_zamani = time.time()
 
-        # ===== YASAK DEBUG - EN BAŞTA =====
-        st.write("=" * 50)
-        st.write("🔴 YASAK VERİSİ KONTROLÜ 🔴")
-        yasak_test = st.session_state.get('yasak_master', None)
-        if yasak_test is not None:
-            st.success(f"✅ Yasak verisi YÜKLÜ - {len(yasak_test)} satır")
-            st.write(f"Sütunlar: {list(yasak_test.columns)}")
-            st.write("İlk 3 satır:")
-            st.dataframe(yasak_test.head(3))
-        else:
-            st.error("❌ YASAK VERİSİ YÜKLENMEMİŞ! Veri Yükleme sayfasından yasak.csv yükleyin!")
-        st.write("=" * 50)
-
         try:
             # ============================================
             # 0. VERİ KALİTE KONTROLÜ
             # ============================================
-            status_text = st.empty()
-            status_text.info("🔍 Veri kalitesi kontrol ediliyor...")
+            # Progress bar ve durum göstergesi
+            progress_container = st.container()
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                detail_text = st.empty()
+
+            def update_progress(pct, status, detail=""):
+                progress_bar.progress(pct / 100)
+                status_text.info(f"⏳ {status}")
+                if detail:
+                    detail_text.caption(detail)
+
+            update_progress(5, "Veri kalitesi kontrol ediliyor...")
             
             # Zorunlu kolonları kontrol et
             anlik_zorunlu = ['urun_kod', 'magaza_kod', 'stok', 'yol', 'satis']
@@ -910,13 +909,11 @@ elif menu == "📐 Hesaplama":
                     st.error(hata)
                 st.warning("⚠️ Lütfen Veri Yükleme sayfasından verileri kontrol edin!")
                 st.stop()
-            
-            st.success("✅ Veri kalitesi OK!")
-            
+
             # ============================================
             # 1. VERİ HAZIRLA
             # ============================================
-            status_text.info("📂 Veriler hazırlanıyor...")
+            update_progress(10, "Veriler hazırlanıyor...", "Anlık stok/satış yükleniyor")
 
             df = st.session_state.anlik_stok_satis.copy()
             df['urun_kod'] = df['urun_kod'].astype(str)
@@ -935,17 +932,14 @@ elif menu == "📐 Hesaplama":
             magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
 
             kpi_df = st.session_state.kpi.copy() if st.session_state.kpi is not None else pd.DataFrame()
-
-            st.write(f"✅ Anlık stok/satış: {len(df):,} satır")
-            st.write(f"✅ Depo stok: {len(depo_df):,} satır")
             
             # ============================================
             # 1.5 BRÜT KAR MARJI HESAPLA VE FİLTRELE
             # ============================================
+            update_progress(15, "Brüt kar marjı hesaplanıyor...", f"{len(df):,} satır işleniyor")
             brut_kar_filtre_sayisi = 0
-            
+
             if brut_kar_aktif and brut_kar_siniri > 0:
-                st.info(f"💰 Brüt kar marjı filtresi uygulanıyor (Min: %{brut_kar_siniri:.0f})...")
                 
                 # BKM hesapla: (ciro - smm*satis) / ciro * 100 veya direkt smm/satis
                 # smm = satılan malın maliyeti (toplam), ciro = satış hasılatı
@@ -968,8 +962,6 @@ elif menu == "📐 Hesaplama":
                 # BKM sınırının altındakileri işaretle (ihtiyaç hesaplanmayacak)
                 df['brut_kar_filtreli'] = df['brut_kar_marji'] < brut_kar_siniri
                 brut_kar_filtre_sayisi = df['brut_kar_filtreli'].sum()
-                
-                st.write(f"⚠️ BKM < %{brut_kar_siniri:.0f} olan {brut_kar_filtre_sayisi:,} satır ihtiyaç hesaplamasından çıkarılacak")
             else:
                 df['brut_kar_filtreli'] = False
                 df['brut_kar_marji'] = 100
@@ -977,36 +969,31 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # 1.6 PAKET İÇİ BİLGİSİ EKLE
             # ============================================
+            update_progress(20, "Paket bilgileri ekleniyor...")
             if paket_sevk_aktif:
-                st.info("📦 Paket bilgileri ekleniyor...")
-                
                 if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
                     paket_info = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
                     paket_info['urun_kod'] = paket_info['urun_kod'].astype(str)
                     paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
                     paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
-                    
+
                     df = df.merge(paket_info, on='urun_kod', how='left')
                     df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
-                    
-                    st.write(f"✅ Paket bilgisi eklendi. Ortalama paket içi: {df['paket_ici'].mean():.1f}")
                 else:
                     df['paket_ici'] = 1
-                    st.warning("⚠️ Ürün master'da paket_ici kolonu yok, varsayılan 1 kullanılıyor")
             else:
                 df['paket_ici'] = 1
             
             # ============================================
             # 2. YENİ ÜRÜNLER
             # ============================================
+            update_progress(25, "Yeni ürünler analiz ediliyor...")
             depo_sum = depo_df.groupby('urun_kod')['stok'].sum()
             yeni_adaylar = depo_sum[depo_sum > 300].index.tolist()
-            
+
             urun_magaza_count = df[df['urun_kod'].isin(yeni_adaylar)].groupby('urun_kod')['magaza_kod'].nunique()
             total_magaza = df['magaza_kod'].nunique()
             yeni_urunler = urun_magaza_count[urun_magaza_count < total_magaza * 0.5].index.tolist()
-            
-            st.write(f"✅ Yeni ürün adayı: {len(yeni_urunler):,}")
 
             # ============================================
             # 2.5. HİÇ MAĞAZAYA GİTMEMİŞ YENİ ÜRÜNLER EKLE
@@ -1060,53 +1047,37 @@ elif menu == "📐 Hesaplama":
                         yeni_df = yeni_df.drop('smm', axis=1)
 
                     df = pd.concat([df, yeni_df], ignore_index=True)
-                    st.write(f"🆕 {len(eksik_urunler_filtered)} yeni ürün için {len(tum_magazalar)} mağazaya otomatik satır eklendi")
 
                     # Eksik ürünleri yeni_urunler listesine ekle (initial ihtiyaç için)
                     for urun in eksik_urunler_filtered:
                         if urun not in yeni_urunler:
                             yeni_urunler.append(urun)
 
-            # 3. SEGMENTASYON - VERİ TİPİ UYUMLU + DEBUG
+            # 3. SEGMENTASYON - VERİ TİPİ UYUMLU
+            update_progress(30, "Segmentasyon uygulanıyor...")
             if (st.session_state.urun_segment_map and st.session_state.magaza_segment_map):
                 # Tüm key'leri string'e çevir ve strip uygula
                 urun_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.urun_segment_map.items()}
                 magaza_seg_map_str = {str(k).strip(): str(v) for k, v in st.session_state.magaza_segment_map.items()}
-                
+
                 # df'deki kodları da string'e çevir ve strip uygula
                 df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
                 df['magaza_kod'] = df['magaza_kod'].astype(str).str.strip()
-                
+
                 df['urun_segment'] = df['urun_kod'].map(urun_seg_map_str)
                 df['magaza_segment'] = df['magaza_kod'].map(magaza_seg_map_str)
-                
-                # Eşleşme istatistikleri
-                urun_eslesen = df['urun_segment'].notna().sum()
-                magaza_eslesen = df['magaza_segment'].notna().sum()
-                
-                st.info(f"📊 Segment eşleşme: Ürün {urun_eslesen:,}/{len(df):,} ({urun_eslesen/len(df)*100:.1f}%) | Mağaza {magaza_eslesen:,}/{len(df):,} ({magaza_eslesen/len(df)*100:.1f}%)")
-                
-                # Debug bilgisi - eşleşme düşükse
-                if urun_eslesen < len(df) * 0.5:
-                    st.warning(f"⚠️ Ürün eşleşme düşük! Map'te {len(urun_seg_map_str)} ürün var, df'te {df['urun_kod'].nunique()} unique ürün var.")
-                    with st.expander("🔍 Debug: İlk 5 ürün kodu karşılaştırması"):
-                        df_ornekler = df['urun_kod'].head(5).tolist()
-                        map_ornekler = list(urun_seg_map_str.keys())[:5]
-                        st.write(f"DF'teki örnekler: {df_ornekler}")
-                        st.write(f"Map'teki örnekler: {map_ornekler}")
-                
+
                 # NaN'ları default değerle doldur
                 df['urun_segment'] = df['urun_segment'].fillna('Seg_20-inf')
                 df['magaza_segment'] = df['magaza_segment'].fillna('Seg_20-inf')
             else:
                 df['urun_segment'] = 'Seg_20-inf'
                 df['magaza_segment'] = 'Seg_20-inf'
-                st.warning("⚠️ Segment map bulunamadı, default 'Seg_20-inf' kullanılıyor")
 
-            
             # ============================================
             # 4. KPI VE MG BİLGİLERİ
             # ============================================
+            update_progress(35, "KPI değerleri uygulanıyor...")
             default_fc = kpi_df['forward_cover'].mean() if 'forward_cover' in kpi_df.columns else 7.0
             
             df['min_deger'] = 0.0
@@ -1143,32 +1114,30 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # 5. DEPO KODU EKLEMESİ
             # ============================================
+            update_progress(40, "Depo kodları ekleniyor...")
             if 'depo_kod' in magaza_df.columns:
                 df = df.merge(magaza_df[['magaza_kod', 'depo_kod']], on='magaza_kod', how='left')
-                df['depo_kod'] = df['depo_kod'].fillna('1').astype(str)  # String olarak tut
+                df['depo_kod'] = df['depo_kod'].fillna('1').astype(str)
             else:
                 df['depo_kod'] = '1'
-            
-            st.write(f"✅ Depo kodları eklendi")
-            
+
             # ============================================
             # 6. MATRİS DEĞERLERİ
             # ============================================
+            update_progress(45, "Matris değerleri uygulanıyor...")
             df['genlestirme'] = 1.0
             df['sisme'] = 0.5
             df['min_oran'] = 1.0
             df['initial_katsayi'] = 1.0
-            
+
             all_matrices_exist = all([
                 st.session_state.genlestirme_orani is not None,
                 st.session_state.sisme_orani is not None,
                 st.session_state.min_oran is not None,
                 st.session_state.initial_matris is not None
             ])
-            
+
             if all_matrices_exist:
-                st.info("🔄 Matris değerleri uygulanıyor...")
-                
                 # Genleştirme
                 genles_long = st.session_state.genlestirme_orani.stack().reset_index()
                 genles_long.columns = ['magaza_segment', 'urun_segment', 'genlestirme_mat']
@@ -1177,7 +1146,7 @@ elif menu == "📐 Hesaplama":
                 df = df.merge(genles_long, on=['magaza_segment', 'urun_segment'], how='left')
                 df['genlestirme'] = df['genlestirme_mat'].fillna(df['genlestirme'])
                 df.drop('genlestirme_mat', axis=1, inplace=True)
-                
+
                 # Şişme
                 sisme_long = st.session_state.sisme_orani.stack().reset_index()
                 sisme_long.columns = ['magaza_segment', 'urun_segment', 'sisme_mat']
@@ -1186,7 +1155,7 @@ elif menu == "📐 Hesaplama":
                 df = df.merge(sisme_long, on=['magaza_segment', 'urun_segment'], how='left')
                 df['sisme'] = df['sisme_mat'].fillna(df['sisme'])
                 df.drop('sisme_mat', axis=1, inplace=True)
-                
+
                 # Min Oran
                 min_long = st.session_state.min_oran.stack().reset_index()
                 min_long.columns = ['magaza_segment', 'urun_segment', 'min_oran_mat']
@@ -1195,7 +1164,7 @@ elif menu == "📐 Hesaplama":
                 df = df.merge(min_long, on=['magaza_segment', 'urun_segment'], how='left')
                 df['min_oran'] = df['min_oran_mat'].fillna(df['min_oran'])
                 df.drop('min_oran_mat', axis=1, inplace=True)
-                
+
                 # Initial
                 initial_long = st.session_state.initial_matris.stack().reset_index()
                 initial_long.columns = ['magaza_segment', 'urun_segment', 'initial_mat']
@@ -1204,13 +1173,11 @@ elif menu == "📐 Hesaplama":
                 df = df.merge(initial_long, on=['magaza_segment', 'urun_segment'], how='left')
                 df['initial_katsayi'] = df['initial_mat'].fillna(df['initial_katsayi'])
                 df.drop('initial_mat', axis=1, inplace=True)
-                
-                st.success("✅ Matris değerleri uygulandı!")
-            
+
             # ============================================
-            # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI ✅ + MAX DEGER KONTROLÜ
+            # 7. İHTİYAÇ HESAPLA - MAX YAKLAŞIMI + MAX DEGER KONTROLÜ
             # ============================================
-            st.info("📊 İhtiyaçlar hesaplanıyor (MAX yaklaşımı + Max Değer Kontrolü)...")
+            update_progress(50, "İhtiyaçlar hesaplanıyor...", "MAX yaklaşımı uygulanıyor")
             
             # ⭐ KRİTİK DÜZELTME: RPT hesabında hedef stok MAX değeri aşmamalı!
             # Önce RAW hedef stoğu hesapla
@@ -1244,19 +1211,15 @@ elif menu == "📐 Hesaplama":
             # ✅ MAX'I AL - TEK İHTİYAÇ
             df['ihtiyac'] = df[['rpt_ihtiyac', 'min_ihtiyac', 'initial_ihtiyac']].max(axis=1)
             
-            # MAX tarafından sınırlanan satırları say ve raporla
+            # MAX tarafından sınırlanan satırları say
             max_sinirli = (df['hedef_stok'] < df['hedef_stok_raw']).sum()
-            if max_sinirli > 0:
-                st.warning(f"⚠️ {max_sinirli:,} satırda hedef stok MAX DEĞER tarafından sınırlandı (mağaza kapasitesi korundu)")
-                st.caption(f"💡 Bu satırlarda sevkiyat miktarı, mağaza max kapasitesini aşmamak için düşürüldü")
-            
+
             # ============================================
             # 7.5 BRÜT KAR FİLTRESİ UYGULA
             # ============================================
             if brut_kar_aktif and brut_kar_siniri > 0:
                 # BKM sınırının altındaki ürünlerin ihtiyacını sıfırla
                 df.loc[df['brut_kar_filtreli'] == True, 'ihtiyac'] = 0
-                st.write(f"💰 BKM filtresi uygulandı: {brut_kar_filtre_sayisi:,} satırın ihtiyacı sıfırlandı")
             
             # Hangi türden geldiğini belirle
             def belirle_durum(row):
@@ -1274,13 +1237,11 @@ elif menu == "📐 Hesaplama":
                     return 'RPT'
             
             df['durum'] = df.apply(belirle_durum, axis=1)
-            
-            st.success(f"✅ İhtiyaçlar hesaplandı (MAX yaklaşımı)")
-            
-                         
+
             # ============================================
             # 8. YASAK KONTROL
             # ============================================
+            update_progress(60, "Yasak kontrolleri yapılıyor...")
             if (st.session_state.yasak_master is not None and
                 'urun_kod' in st.session_state.yasak_master.columns and
                 'magaza_kod' in st.session_state.yasak_master.columns):
@@ -1305,12 +1266,11 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # 9. DEPO STOK DAĞITIMI
             # ============================================
-            st.info("🚀 Depo stok dağıtımı yapılıyor...")
-            
+            update_progress(70, "Depo stok dağıtımı yapılıyor...", "Öncelik sıralaması uygulanıyor")
+
             # Sadece pozitif ihtiyaçları al
             result = df[df['ihtiyac'] > 0].copy()
-            st.write(f"Pozitif ihtiyaç sayısı: {len(result):,}")
-            
+
             if len(result) == 0:
                 st.warning("⚠️ Hiç pozitif ihtiyaç bulunamadı!")
                 st.stop()
@@ -1393,24 +1353,19 @@ elif menu == "📐 Hesaplama":
                 
                 # Progress güncelle (her 10K'da bir)
                 if idx % 10000 == 0:
-                    progress_bar.progress(idx / total_rows)
-            
-            progress_bar.progress(1.0)
-            time.sleep(0.5)  # Kısa bekle
-            progress_bar.empty()  # Progress bar'ı temizle
-            
+                    pct = 70 + int((idx / total_rows) * 15)  # 70-85% arası
+                    update_progress(pct, "Depo stok dağıtımı yapılıyor...", f"{idx:,}/{total_rows:,} satır işlendi")
+
             result['sevkiyat_miktari'] = sevkiyat_array
             result['stok_yoklugu_satis_kaybi'] = result['ihtiyac'] - result['sevkiyat_miktari']
-            
+
             if paket_sevk_aktif:
                 result['paket_sevk_uygulandi'] = paket_sevk_flag
-                paket_uygulanan = (paket_sevk_flag == 1).sum()
-                st.write(f"📦 Paket sevkiyatı uygulanan satır: {paket_uygulanan:,}")
-            
+
             # Temizlik
             result.drop('durum_oncelik', axis=1, inplace=True, errors='ignore')
-            
-            st.success("✅ Depo stok dağıtımı tamamlandı!")
+
+            update_progress(85, "Sonuçlar hazırlanıyor...", "KPI bilgileri ekleniyor")
             
             # ============================================
             # 10. SONUÇ HAZIRLA - GENİŞLETİLMİŞ KOLONLAR
@@ -1455,16 +1410,13 @@ elif menu == "📐 Hesaplama":
                     paket_master['urun_kod'] = paket_master['urun_kod'].astype(str)
                     paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
                     paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1
-                    
+
                     result = result.merge(paket_master, on='urun_kod', how='left')
                     result['paket_ici'] = result['paket_ici'].fillna(1).astype(int)
-                    st.write("✅ Paket bilgisi ürün master'dan eklendi")
                 else:
                     result['paket_ici'] = 1
-                    st.write("ℹ️ Ürün master'da paket_ici kolonu yok, varsayılan 1 kullanılıyor")
-            except Exception as paket_err:
+            except Exception:
                 result['paket_ici'] = 1
-                st.warning(f"⚠️ Paket bilgisi eklenemedi: {str(paket_err)}, varsayılan 1 kullanılıyor")
             
             # Sevkiyat paket adeti hesapla
             result['sevkiyat_paket_adet'] = np.where(
@@ -1582,13 +1534,11 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # SON YASAK KONTROLÜ - TÜM HESAPLAMALAR BİTTİKTEN SONRA
             # ============================================
-            st.info("🔍 Yasak kontrolü başlıyor...")
+            update_progress(95, "Son kontroller yapılıyor...", "Yasak kontrolü")
 
             yasak_master = st.session_state.get('yasak_master', None)
 
             if yasak_master is not None and len(yasak_master) > 0:
-                st.write(f"📋 Yasak listesi yüklü: {len(yasak_master)} kayıt")
-                st.write(f"📋 Yasak sütunları: {list(yasak_master.columns)}")
 
                 yasak_df = yasak_master.copy()
 
@@ -1604,59 +1554,38 @@ elif menu == "📐 Hesaplama":
                         yasak_df['yasak_durum'] = pd.to_numeric(yasak_df['yasak_durum'], errors='coerce').fillna(0)
                         yasak_aktif = yasak_df[yasak_df['yasak_durum'] >= 1]
                     else:
-                        yasak_aktif = yasak_df  # yasak_durum yoksa tümü yasaklı kabul et
-
-                    st.write(f"🚫 Aktif yasak sayısı: {len(yasak_aktif)}")
+                        yasak_aktif = yasak_df
 
                     if len(yasak_aktif) > 0:
-                        # Yasak set oluştur
                         yasak_set = set(zip(yasak_aktif['urun_kod'], yasak_aktif['magaza_kod']))
-
-                        # Final'de urun_kod ve magaza_kod'u strip et
                         final['urun_kod'] = final['urun_kod'].astype(str).str.strip()
                         final['magaza_kod'] = final['magaza_kod'].astype(str).str.strip()
 
-                        # Debug: Test ürünü kontrol et
-                        test_urun = '10027317001'
-                        test_magaza = '9037'
-                        if (test_urun, test_magaza) in yasak_set:
-                            st.write(f"✅ TEST: ({test_urun}, {test_magaza}) yasak setinde VAR")
-                        else:
-                            st.write(f"❌ TEST: ({test_urun}, {test_magaza}) yasak setinde YOK")
-                            st.write(f"Yasak set örnekleri: {list(yasak_set)[:5]}")
-
-                        # Yasaklı kombinasyonların sevkiyatını sıfırla
                         yasak_mask = final.apply(
                             lambda row: (str(row['urun_kod']).strip(), str(row['magaza_kod']).strip()) in yasak_set,
                             axis=1
                         )
                         yasak_sayisi = yasak_mask.sum()
 
-                        st.write(f"🎯 Final'de eşleşen yasak satır sayısı: {yasak_sayisi}")
-
                         if yasak_sayisi > 0:
                             final.loc[yasak_mask, 'sevkiyat_miktari'] = 0
                             if 'Sevkiyat_Paket_Adet' in final.columns:
                                 final.loc[yasak_mask, 'Sevkiyat_Paket_Adet'] = 0
-                            st.warning(f"🚫 YASAK KONTROLÜ: {yasak_sayisi:,} satırın sevkiyatı sıfırlandı!")
-                        else:
-                            st.info("ℹ️ Sevkiyat listesinde yasaklı ürün+mağaza kombinasyonu bulunamadı")
-                else:
-                    st.error(f"❌ Yasak dosyasında gerekli sütunlar yok! Mevcut: {list(yasak_df.columns)}")
-            else:
-                st.warning("⚠️ Yasak listesi yüklenmemiş veya boş!")
 
             # KAYDET
             st.session_state.sevkiyat_sonuc = final
-            
+
             # Orijinal verileri de kaydet (özet metrikler için)
             st.session_state.hesaplama_anlik_df = st.session_state.anlik_stok_satis.copy()
             st.session_state.hesaplama_depo_df = st.session_state.depo_stok.copy()
-            
+
             bitis_zamani = time.time()
             algoritma_suresi = bitis_zamani - baslaangic_zamani
-            
-            st.success(f"✅ Hesaplama tamamlandı! {len(final):,} satır oluşturuldu.")
+
+            # Progress tamamla ve temizle
+            progress_bar.progress(100 / 100)
+            status_text.success(f"✅ Hesaplama tamamlandı! ({algoritma_suresi:.1f} sn)")
+            detail_text.empty()
             st.markdown("---")
             
             # ============================================

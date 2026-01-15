@@ -917,25 +917,25 @@ elif menu == "📐 Hesaplama":
             # 1. VERİ HAZIRLA
             # ============================================
             status_text.info("📂 Veriler hazırlanıyor...")
-            
+
             df = st.session_state.anlik_stok_satis.copy()
             df['urun_kod'] = df['urun_kod'].astype(str)
             df['magaza_kod'] = df['magaza_kod'].astype(str)
-            
+
             # Sayısal kolonları zorla dönüştür
             for col in ['stok', 'yol', 'satis']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
+
             depo_df = st.session_state.depo_stok.copy()
             depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
-            depo_df['depo_kod'] = depo_df['depo_kod'].astype(str)  # String olarak tut
+            depo_df['depo_kod'] = depo_df['depo_kod'].astype(str)
             depo_df['stok'] = pd.to_numeric(depo_df['stok'], errors='coerce').fillna(0)
-            
+
             magaza_df = st.session_state.magaza_master.copy()
             magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
-            
+
             kpi_df = st.session_state.kpi.copy() if st.session_state.kpi is not None else pd.DataFrame()
-            
+
             st.write(f"✅ Anlık stok/satış: {len(df):,} satır")
             st.write(f"✅ Depo stok: {len(depo_df):,} satır")
             

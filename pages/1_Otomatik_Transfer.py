@@ -273,13 +273,6 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
 
     with st.spinner("🔄 Transfer önerileri hesaplanıyor..."):
 
-        try:
-            st.write("🔄 [DEBUG] Transfer hesaplama başlıyor...")
-            st.write(f"   magaza_master sütunları: {list(magaza_master.columns)}")
-            st.write(f"   depo_stok sütunları: {list(depo_stok.columns)}")
-        except Exception as e:
-            st.error(f"❌ Debug hatası: {e}")
-
         # 1. Mağaza filtresi uygula
         if transfer_mode == 'Bölge İçi':
             filtered_magaza = magaza_master[magaza_master['bolge'] == selected_bolge].copy()
@@ -625,90 +618,22 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
         # 8.5. Mağaza çifti bazında MIN kontrolü
         st.info(f"🔍 Mağaza çifti bazında min {min_transfer_per_pair:,} adet kontrolü yapılıyor...")
 
-        try:
-            # Mağaza çifti bazında toplam hesapla
-            magaza_cift_toplam = transfer_df.groupby(['veren_magaza', 'alan_magaza'])['transfer_miktar'].sum().reset_index()
-            magaza_cift_toplam.columns = ['veren_magaza', 'alan_magaza', 'toplam_transfer']
+        # Mağaza çifti bazında toplam hesapla
+        magaza_cift_toplam = transfer_df.groupby(['veren_magaza', 'alan_magaza'])['transfer_miktar'].sum().reset_index()
+        magaza_cift_toplam.columns = ['veren_magaza', 'alan_magaza', 'toplam_transfer']
 
-            # Min'den fazla olanları al
-            valid_pairs = magaza_cift_toplam[magaza_cift_toplam['toplam_transfer'] >= min_transfer_per_pair][['veren_magaza', 'alan_magaza']]
+        # Min'den fazla olanları al
+        valid_pairs = magaza_cift_toplam[magaza_cift_toplam['toplam_transfer'] >= min_transfer_per_pair][['veren_magaza', 'alan_magaza']]
 
-            # Sadece valid çiftleri tut
-            transfer_df = transfer_df.merge(valid_pairs, on=['veren_magaza', 'alan_magaza'], how='inner')
+        # Sadece valid çiftleri tut
+        transfer_df = transfer_df.merge(valid_pairs, on=['veren_magaza', 'alan_magaza'], how='inner')
 
-            removed_count = len(transfer_list) - len(transfer_df)
-            st.info(f"✂️ {removed_count:,} ürün-mağaza eşleşmesi (min {min_transfer_per_pair:,} adet altındaki mağaza çiftleri) çıkarıldı")
-        except Exception as e:
-            st.error(f"❌ Min kontrol hatası: {str(e)}")
-            st.error(f"transfer_df sütunları: {list(transfer_df.columns)}")
-            st.stop()
+        removed_count = len(transfer_list) - len(transfer_df)
+        st.info(f"✂️ {removed_count:,} ürün-mağaza eşleşmesi (min {min_transfer_per_pair:,} adet altındaki mağaza çiftleri) çıkarıldı")
 
         if len(transfer_df) == 0:
             st.warning("⚠️ Min limit kontrolü sonrası transfer kalmadı!")
             st.info(f"💡 Tüm mağaza çiftlerinin toplam transferi {min_transfer_per_pair:,} adet altında. Min limiti azaltıp tekrar deneyin.")
-            st.stop()
-
-        # Depo stok bilgisini ekle (eğer depo_kod sütunu varsa)
-        st.write(f"🔄 [DEBUG] Depo kod kontrolü: magaza_master={('depo_kod' in magaza_master.columns)}, depo_stok={('depo_kod' in depo_stok.columns)}")
-
-        try:
-            if 'depo_kod' in magaza_master.columns and 'depo_kod' in depo_stok.columns:
-                st.write("🔄 [DEBUG] Depo bilgisi ekleniyor...")
-                st.write(f"   transfer_df satır: {len(transfer_df)}, sütunlar: {list(transfer_df.columns)[:5]}...")
-                st.write(f"   magaza_master satır: {len(magaza_master)}")
-
-                # Veren mağazanın depo kodunu al
-                st.write("🔄 [DEBUG] veren_depo oluşturuluyor...")
-                veren_depo = magaza_master[['magaza_kod', 'depo_kod']].drop_duplicates()
-                veren_depo = veren_depo.rename(columns={'magaza_kod': 'veren_magaza', 'depo_kod': 'veren_depo_kod'})
-                st.write(f"   veren_depo satır: {len(veren_depo)}")
-
-                st.write("🔄 [DEBUG] merge yapılıyor...")
-                transfer_df = transfer_df.merge(veren_depo, on='veren_magaza', how='left')
-                st.write(f"🔄 [DEBUG] Veren depo eklendi, yeni satır: {len(transfer_df)}")
-
-                # Alan mağazanın depo kodunu al
-                alan_depo = magaza_master[['magaza_kod', 'depo_kod']].drop_duplicates()
-                alan_depo = alan_depo.rename(columns={'magaza_kod': 'alan_magaza', 'depo_kod': 'alan_depo_kod'})
-                transfer_df = transfer_df.merge(alan_depo, on='alan_magaza', how='left')
-                st.write(f"🔄 [DEBUG] Alan depo eklendi, satır: {len(transfer_df)}")
-
-                # Depo stok miktarlarını ekle - önce grupla (duplicate'leri topla)
-                depo_stok_grouped = depo_stok.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
-                st.write(f"🔄 [DEBUG] Depo stok gruplandı: {len(depo_stok)} -> {len(depo_stok_grouped)} satır")
-
-                # Veren depo stok
-                depo_stok_veren = depo_stok_grouped.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})
-                transfer_df = transfer_df.merge(
-                    depo_stok_veren[['veren_depo_kod', 'urun_kod', 'veren_depo_stok']],
-                    on=['veren_depo_kod', 'urun_kod'],
-                    how='left'
-                )
-                st.write(f"🔄 [DEBUG] Veren depo stok eklendi, satır: {len(transfer_df)}")
-
-                # Alan depo stok
-                depo_stok_alan = depo_stok_grouped.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
-                transfer_df = transfer_df.merge(
-                    depo_stok_alan[['alan_depo_kod', 'urun_kod', 'alan_depo_stok']],
-                    on=['alan_depo_kod', 'urun_kod'],
-                    how='left'
-                )
-                st.write(f"🔄 [DEBUG] Alan depo stok eklendi, satır: {len(transfer_df)}")
-
-                # Depo stok boş olanları 0 yap
-                transfer_df['veren_depo_stok'] = transfer_df['veren_depo_stok'].fillna(0)
-                transfer_df['alan_depo_stok'] = transfer_df['alan_depo_stok'].fillna(0)
-            else:
-                # Depo bilgisi yoksa boş sütunlar ekle
-                transfer_df['veren_depo_kod'] = None
-                transfer_df['alan_depo_kod'] = None
-                transfer_df['veren_depo_stok'] = 0
-                transfer_df['alan_depo_stok'] = 0
-                st.warning("⚠️ Mağaza Master'da 'depo_kod' sütunu bulunamadı, depo stok bilgisi eklenmedi.")
-        except Exception as e:
-            st.error(f"❌ Depo stok hatası: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
             st.stop()
 
         # 9. Mağaza bazında gruplama ve limitler

@@ -673,28 +673,27 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
                 transfer_df = transfer_df.merge(alan_depo, on='alan_magaza', how='left')
                 st.write(f"🔄 [DEBUG] Alan depo eklendi, satır: {len(transfer_df)}")
 
-                # Depo stok miktarlarını ekle
-                depo_stok_veren = depo_stok.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})
+                # Depo stok miktarlarını ekle - önce grupla (duplicate'leri topla)
+                depo_stok_grouped = depo_stok.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
+                st.write(f"🔄 [DEBUG] Depo stok gruplandı: {len(depo_stok)} -> {len(depo_stok_grouped)} satır")
+
+                # Veren depo stok
+                depo_stok_veren = depo_stok_grouped.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})
                 transfer_df = transfer_df.merge(
                     depo_stok_veren[['veren_depo_kod', 'urun_kod', 'veren_depo_stok']],
                     on=['veren_depo_kod', 'urun_kod'],
                     how='left'
                 )
-                st.write("🔄 [DEBUG] Veren depo stok eklendi")
-                st.write(f"   transfer_df sütunları: {list(transfer_df.columns)}")
+                st.write(f"🔄 [DEBUG] Veren depo stok eklendi, satır: {len(transfer_df)}")
 
-                st.write("🔄 [DEBUG] Alan depo stok hazırlanıyor...")
-                st.write(f"   depo_stok sütunları: {list(depo_stok.columns)}")
-                depo_stok_alan = depo_stok.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
-                st.write(f"   depo_stok_alan sütunları: {list(depo_stok_alan.columns)}")
-
-                st.write("🔄 [DEBUG] Alan depo stok merge yapılıyor...")
+                # Alan depo stok
+                depo_stok_alan = depo_stok_grouped.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
                 transfer_df = transfer_df.merge(
                     depo_stok_alan[['alan_depo_kod', 'urun_kod', 'alan_depo_stok']],
                     on=['alan_depo_kod', 'urun_kod'],
                     how='left'
                 )
-                st.write("🔄 [DEBUG] Alan depo stok eklendi")
+                st.write(f"🔄 [DEBUG] Alan depo stok eklendi, satır: {len(transfer_df)}")
 
                 # Depo stok boş olanları 0 yap
                 transfer_df['veren_depo_stok'] = transfer_df['veren_depo_stok'].fillna(0)

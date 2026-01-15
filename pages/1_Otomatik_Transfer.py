@@ -273,6 +273,13 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
 
     with st.spinner("🔄 Transfer önerileri hesaplanıyor..."):
 
+        try:
+            st.write("🔄 [DEBUG] Transfer hesaplama başlıyor...")
+            st.write(f"   magaza_master sütunları: {list(magaza_master.columns)}")
+            st.write(f"   depo_stok sütunları: {list(depo_stok.columns)}")
+        except Exception as e:
+            st.error(f"❌ Debug hatası: {e}")
+
         # 1. Mağaza filtresi uygula
         if transfer_mode == 'Bölge İçi':
             filtered_magaza = magaza_master[magaza_master['bolge'] == selected_bolge].copy()
@@ -642,40 +649,53 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
             st.stop()
 
         # Depo stok bilgisini ekle (eğer depo_kod sütunu varsa)
-        if 'depo_kod' in magaza_master.columns and 'depo_kod' in depo_stok.columns:
-            # Veren mağazanın depo kodunu al
-            veren_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'veren_magaza', 'depo_kod': 'veren_depo_kod'})
-            transfer_df = transfer_df.merge(veren_depo, on='veren_magaza', how='left')
+        st.write(f"🔄 [DEBUG] Depo kod kontrolü: magaza_master={('depo_kod' in magaza_master.columns)}, depo_stok={('depo_kod' in depo_stok.columns)}")
 
-            # Alan mağazanın depo kodunu al
-            alan_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'alan_magaza', 'depo_kod': 'alan_depo_kod'})
-            transfer_df = transfer_df.merge(alan_depo, on='alan_magaza', how='left')
+        try:
+            if 'depo_kod' in magaza_master.columns and 'depo_kod' in depo_stok.columns:
+                st.write("🔄 [DEBUG] Depo bilgisi ekleniyor...")
+                # Veren mağazanın depo kodunu al
+                veren_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'veren_magaza', 'depo_kod': 'veren_depo_kod'})
+                transfer_df = transfer_df.merge(veren_depo, on='veren_magaza', how='left')
+                st.write("🔄 [DEBUG] Veren depo eklendi")
 
-            # Depo stok miktarlarını ekle
-            depo_stok_veren = depo_stok.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})
-            transfer_df = transfer_df.merge(
-                depo_stok_veren[['veren_depo_kod', 'urun_kod', 'veren_depo_stok']],
-                on=['veren_depo_kod', 'urun_kod'],
-                how='left'
-            )
+                # Alan mağazanın depo kodunu al
+                alan_depo = magaza_master[['magaza_kod', 'depo_kod']].rename(columns={'magaza_kod': 'alan_magaza', 'depo_kod': 'alan_depo_kod'})
+                transfer_df = transfer_df.merge(alan_depo, on='alan_magaza', how='left')
+                st.write("🔄 [DEBUG] Alan depo eklendi")
 
-            depo_stok_alan = depo_stok.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
-            transfer_df = transfer_df.merge(
-                depo_stok_alan[['alan_depo_kod', 'urun_kod', 'alan_depo_stok']],
-                on=['alan_depo_kod', 'urun_kod'],
-                how='left'
-            )
+                # Depo stok miktarlarını ekle
+                depo_stok_veren = depo_stok.rename(columns={'depo_kod': 'veren_depo_kod', 'stok': 'veren_depo_stok'})
+                transfer_df = transfer_df.merge(
+                    depo_stok_veren[['veren_depo_kod', 'urun_kod', 'veren_depo_stok']],
+                    on=['veren_depo_kod', 'urun_kod'],
+                    how='left'
+                )
+                st.write("🔄 [DEBUG] Veren depo stok eklendi")
 
-            # Depo stok boş olanları 0 yap
-            transfer_df['veren_depo_stok'] = transfer_df['veren_depo_stok'].fillna(0)
-            transfer_df['alan_depo_stok'] = transfer_df['alan_depo_stok'].fillna(0)
-        else:
-            # Depo bilgisi yoksa boş sütunlar ekle
-            transfer_df['veren_depo_kod'] = None
-            transfer_df['alan_depo_kod'] = None
-            transfer_df['veren_depo_stok'] = 0
-            transfer_df['alan_depo_stok'] = 0
-            st.warning("⚠️ Mağaza Master'da 'depo_kod' sütunu bulunamadı, depo stok bilgisi eklenmedi.")
+                depo_stok_alan = depo_stok.rename(columns={'depo_kod': 'alan_depo_kod', 'stok': 'alan_depo_stok'})
+                transfer_df = transfer_df.merge(
+                    depo_stok_alan[['alan_depo_kod', 'urun_kod', 'alan_depo_stok']],
+                    on=['alan_depo_kod', 'urun_kod'],
+                    how='left'
+                )
+                st.write("🔄 [DEBUG] Alan depo stok eklendi")
+
+                # Depo stok boş olanları 0 yap
+                transfer_df['veren_depo_stok'] = transfer_df['veren_depo_stok'].fillna(0)
+                transfer_df['alan_depo_stok'] = transfer_df['alan_depo_stok'].fillna(0)
+            else:
+                # Depo bilgisi yoksa boş sütunlar ekle
+                transfer_df['veren_depo_kod'] = None
+                transfer_df['alan_depo_kod'] = None
+                transfer_df['veren_depo_stok'] = 0
+                transfer_df['alan_depo_stok'] = 0
+                st.warning("⚠️ Mağaza Master'da 'depo_kod' sütunu bulunamadı, depo stok bilgisi eklenmedi.")
+        except Exception as e:
+            st.error(f"❌ Depo stok hatası: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            st.stop()
 
         # 9. Mağaza bazında gruplama ve limitler
         st.info(f"📊 Mağaza çifti limitleri uygulanıyor (Max {max_transfer_per_pair:,} adet/çift, Max {max_alan_per_veren} alan/veren, Max {max_veren_per_alan} veren/alan)...")

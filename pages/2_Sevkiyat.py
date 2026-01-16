@@ -1283,43 +1283,28 @@ elif menu == "📐 Hesaplama":
                 
                 if key in depo_stok_dict and depo_stok_dict[key] > 0:
                     mevcut_stok = depo_stok_dict[key]
-                    
+
                     # ============================================
-                    # PAKET SEVKİYATI MANTIĞI
+                    # PAKET SEVKİYATI MANTIĞI (BASİT)
                     # ============================================
-                    if paket_sevk_aktif and paket_ici > 1:
-                        # Yukarı yuvarlama dene
-                        paket_sayisi_yukari = int(np.ceil(ihtiyac / paket_ici))
-                        sevk_yukari = paket_sayisi_yukari * paket_ici
-                        
-                        # Aşağı yuvarlama
-                        paket_sayisi_asagi = int(np.floor(ihtiyac / paket_ici))
-                        sevk_asagi = paket_sayisi_asagi * paket_ici
-                        
-                        # Şişme kontrolü: (sevk - ihtiyac) / ihtiyac <= sisme_orani
-                        if ihtiyac > 0:
-                            sisme_yukari = (sevk_yukari - ihtiyac) / ihtiyac
+                    # paket_ici güvenli değer (0 veya negatifse 1)
+                    safe_paket = paket_ici if paket_ici > 0 else 1
+
+                    if paket_sevk_aktif and safe_paket > 1:
+                        # İhtiyacı paket katına yuvarla (yukarı)
+                        paket_sayisi = int(np.ceil(ihtiyac / safe_paket))
+                        istenen_sevk = paket_sayisi * safe_paket
+
+                        # Stok yetiyorsa gönder, yetmiyorsa stokun izin verdiği kadar paket
+                        if istenen_sevk <= mevcut_stok:
+                            sevk = istenen_sevk
                         else:
-                            sisme_yukari = 1.0  # Çok büyük
-                        
-                        # Karar ver
-                        if sisme_yukari <= sisme_orani and sevk_yukari <= mevcut_stok:
-                            # Yukarı yuvarlama OK - şişme oranı uygun
-                            sevk = sevk_yukari
-                        elif sevk_asagi > 0 and sevk_asagi <= mevcut_stok:
-                            # Aşağı yuvarlama kullan
-                            sevk = sevk_asagi
-                        elif sevk_asagi == 0 and sevk_yukari <= mevcut_stok and sisme_yukari <= sisme_orani:
-                            # İhtiyaç çok düşük ama 1 paket gönder
-                            sevk = sevk_yukari
-                        else:
-                            # Stok yetersiz, mevcut stoğu paket katlarına yuvarla
-                            max_paket = int(np.floor(mevcut_stok / paket_ici))
-                            sevk = max_paket * paket_ici
-                        
+                            max_paket = int(np.floor(mevcut_stok / safe_paket))
+                            sevk = max_paket * safe_paket
+
                         paket_sevk_flag[idx] = 1 if sevk > 0 else 0
                     else:
-                        # Normal sevkiyat (paket yok)
+                        # Normal sevkiyat (paket yok veya paket_ici=1)
                         sevk = min(ihtiyac, mevcut_stok)
                     
                     depo_stok_dict[key] -= sevk

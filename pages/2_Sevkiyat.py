@@ -1237,9 +1237,10 @@ elif menu == "📐 Hesaplama":
             depo_kodlar = result['depo_kod'].values.astype(str)
             urun_kodlar = result['urun_kod'].values.astype(str)
             ihtiyaclar = result['ihtiyac'].values.astype(float)
-            # ⭐ KRİTİK: NaN değerleri önce fillna ile doldur, sonra int'e çevir
+            # ⭐ KRİTİK: NaN ve 0 değerleri 1 olarak al (bölme hatası önleme)
             if 'paket_ici' in result.columns:
                 paket_icileri = result['paket_ici'].fillna(1).values.astype(int)
+                paket_icileri = np.where(paket_icileri < 1, 1, paket_icileri)
             else:
                 paket_icileri = np.ones(len(result), dtype=int)
             # Şişme oranları için de NaN kontrolü
@@ -1367,17 +1368,15 @@ elif menu == "📐 Hesaplama":
 
                     result = result.merge(paket_master, on='urun_kod', how='left')
                     result['paket_ici'] = result['paket_ici'].fillna(1).astype(int)
+                    result.loc[result['paket_ici'] < 1, 'paket_ici'] = 1
                 else:
                     result['paket_ici'] = 1
             except Exception:
                 result['paket_ici'] = 1
-            
-            # Sevkiyat paket adeti hesapla
-            result['sevkiyat_paket_adet'] = np.where(
-                result['paket_ici'] > 0,
-                np.ceil(result['sevkiyat_miktari'] / result['paket_ici']).astype(int),
-                0
-            )
+
+            # Sevkiyat paket adeti hesapla (0'a bölme hatası önleme)
+            safe_paket_ici = result['paket_ici'].replace(0, 1)
+            result['sevkiyat_paket_adet'] = np.ceil(result['sevkiyat_miktari'] / safe_paket_ici).fillna(0).astype(int)
             
             # ============================================
             # KPI DURUM KOLONLARI EKLE
@@ -1957,3 +1956,4 @@ elif menu == "💾 Master Data":
     st.markdown("---")
     
     st.warning("🚧 **Master Data modülü yakında yayında!** 🚧")
+s

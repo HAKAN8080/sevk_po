@@ -58,15 +58,64 @@ st.markdown("---")
 # CSV okuma fonksiyonu
 def read_csv_safe(file):
     try:
-        df = pd.read_csv(file, sep=';', encoding='utf-8-sig', quoting=1, on_bad_lines='warn')
+        # Kod kolonlarını string olarak oku (float .0 sorunu önleme)
+        df = pd.read_csv(file, sep=';', encoding='utf-8-sig', quoting=1, on_bad_lines='warn', dtype=str)
         return df, ';'
     except:
         try:
             file.seek(0)
-            df = pd.read_csv(file, sep=',', encoding='utf-8-sig', quoting=1, on_bad_lines='warn')
+            df = pd.read_csv(file, sep=',', encoding='utf-8-sig', quoting=1, on_bad_lines='warn', dtype=str)
             return df, ','
         except Exception as e:
             raise Exception(f"CSV okuma hatası: {str(e)}")
+
+# CSV validasyon fonksiyonu
+def validate_csv(df, data_type, required_cols):
+    """CSV dosyasını kontrol et ve hataları döndür"""
+    errors = []
+    warnings = []
+
+    # 1. Boş dosya kontrolü
+    if df is None or df.empty:
+        errors.append("❌ Dosya boş veya okunamadı!")
+        return errors, warnings
+
+    # 2. Zorunlu kolon kontrolü (sadece kritik olanlar)
+    critical_cols = {
+        'urun_master': ['urun_kod', 'mg'],
+        'magaza_master': ['magaza_kod', 'depo_kod'],
+        'depo_stok': ['depo_kod', 'urun_kod', 'stok'],
+        'anlik_stok_satis': ['magaza_kod', 'urun_kod', 'stok', 'yol', 'satis'],
+        'kpi': ['mg_id'],
+        'yasak_master': ['urun_kod', 'magaza_kod'],
+        'haftalik_trend': ['klasman_kod', 'marka_kod'],
+        'po_yasak': ['urun_kodu'],
+        'po_detay_kpi': ['marka_kod']
+    }
+
+    if data_type in critical_cols:
+        missing_critical = [c for c in critical_cols[data_type] if c not in df.columns]
+        if missing_critical:
+            errors.append(f"❌ Zorunlu kolonlar eksik: {', '.join(missing_critical)}")
+
+    # 3. Tüm beklenen kolonları kontrol et (uyarı olarak)
+    missing_optional = [c for c in required_cols if c not in df.columns and c not in critical_cols.get(data_type, [])]
+    if missing_optional:
+        warnings.append(f"⚠️ Opsiyonel kolonlar eksik: {', '.join(missing_optional)}")
+
+    # 4. Kritik kolonlarda boş değer kontrolü
+    if data_type in critical_cols:
+        for col in critical_cols[data_type]:
+            if col in df.columns:
+                null_count = df[col].isna().sum() + (df[col] == '').sum()
+                if null_count > 0:
+                    errors.append(f"❌ '{col}' kolonunda {null_count} adet boş değer var!")
+
+    # 5. Satır sayısı kontrolü
+    if len(df) == 0:
+        errors.append("❌ Dosyada hiç veri satırı yok!")
+
+    return errors, warnings
 
 # CSV yazma fonksiyonu
 def write_csv_safe(df):
@@ -490,11 +539,27 @@ if uploaded_files:
                         for col in numeric_cols:
                             if col in df_clean.columns:
                                 df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
-                    
+
+                    # CSV VALİDASYONU
+                    errors, warnings = validate_csv(df_clean, matched_key, definition['columns'])
+
+                    if errors:
+                        # Kritik hata varsa kaydetme
+                        upload_results.append({
+                            'Dosya': uploaded_file.name,
+                            'Durum': f"❌ {errors[0]}"
+                        })
+                        continue
+
+                    # Uyarılar varsa göster ama kaydet
+                    warning_msg = ""
+                    if warnings:
+                        warning_msg = f" | {warnings[0]}"
+
                     st.session_state[definition['state_key']] = df_clean
                     upload_results.append({
                         'Dosya': uploaded_file.name,
-                        'Durum': f"✅ {len(df_clean):,} satır"
+                        'Durum': f"✅ {len(df_clean):,} satır{warning_msg}"
                     })
             
             except Exception as e:

@@ -1956,4 +1956,4 @@ elif menu == "💾 Master Data":
     st.markdown("---")
     
     st.warning("🚧 **Master Data modülü yakında yayında!** 🚧")
-s
+

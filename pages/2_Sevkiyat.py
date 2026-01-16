@@ -1325,21 +1325,45 @@ elif menu == "📐 Hesaplama":
             # ============================================
             # 10. SONUÇ HAZIRLA - GENİŞLETİLMİŞ KOLONLAR
             # ============================================
-            
+
             # Önce KPI'dan forward_cover, min, max değerlerini al
+            # mg kolonu kontrolü
+            if 'mg' not in result.columns:
+                result['mg'] = '0'
+
+            kpi_merged = False
             if not kpi_df.empty and 'mg_id' in kpi_df.columns:
                 kpi_lookup_df = kpi_df.copy()
                 kpi_lookup_df['mg_id'] = kpi_lookup_df['mg_id'].astype(str)
-                result = result.merge(
-                    kpi_lookup_df[['mg_id', 'min_deger', 'max_deger', 'forward_cover']].rename(
-                        columns={'mg_id': 'mg', 'min_deger': 'kpi_min', 'max_deger': 'kpi_max', 'forward_cover': 'kpi_forward_cover'}
-                    ),
-                    on='mg', how='left'
-                )
-            else:
+
+                # Gerekli kolonları kontrol et ve eksik olanları ekle
+                if 'min_deger' not in kpi_lookup_df.columns:
+                    kpi_lookup_df['min_deger'] = 0
+                if 'max_deger' not in kpi_lookup_df.columns:
+                    kpi_lookup_df['max_deger'] = 999999
+                if 'forward_cover' not in kpi_lookup_df.columns:
+                    kpi_lookup_df['forward_cover'] = default_fc
+
+                try:
+                    result = result.merge(
+                        kpi_lookup_df[['mg_id', 'min_deger', 'max_deger', 'forward_cover']].rename(
+                            columns={'mg_id': 'mg', 'min_deger': 'kpi_min', 'max_deger': 'kpi_max', 'forward_cover': 'kpi_forward_cover'}
+                        ),
+                        on='mg', how='left'
+                    )
+                    kpi_merged = True
+                except Exception:
+                    kpi_merged = False
+
+            if not kpi_merged:
                 result['kpi_min'] = 0
                 result['kpi_max'] = 999999
                 result['kpi_forward_cover'] = default_fc
+
+            # NaN değerleri doldur
+            result['kpi_min'] = result['kpi_min'].fillna(0)
+            result['kpi_max'] = result['kpi_max'].fillna(999999)
+            result['kpi_forward_cover'] = result['kpi_forward_cover'].fillna(default_fc)
             
             # Depo stok bilgisini ekle
             depo_stok_merge = depo_df.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
@@ -1956,4 +1980,3 @@ elif menu == "💾 Master Data":
     st.markdown("---")
     
     st.warning("🚧 **Master Data modülü yakında yayında!** 🚧")
-

@@ -57,6 +57,18 @@ depo_stok = st.session_state.depo_stok.copy()
 anlik_stok_satis = st.session_state.anlik_stok_satis.copy()
 kpi = st.session_state.kpi.copy()
 
+# Veri tipi uyumluluğu - merge hataları önleme
+if 'urun_kod' in urun_master.columns:
+    urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
+if 'urun_kod' in anlik_stok_satis.columns:
+    anlik_stok_satis['urun_kod'] = anlik_stok_satis['urun_kod'].astype(str)
+if 'urun_kod' in depo_stok.columns:
+    depo_stok['urun_kod'] = depo_stok['urun_kod'].astype(str)
+if 'magaza_kod' in magaza_master.columns:
+    magaza_master['magaza_kod'] = magaza_master['magaza_kod'].astype(str)
+if 'magaza_kod' in anlik_stok_satis.columns:
+    anlik_stok_satis['magaza_kod'] = anlik_stok_satis['magaza_kod'].astype(str)
+
 st.success("✅ Tüm veriler yüklendi!")
 
 # ============================================
@@ -316,6 +328,13 @@ if st.button("🚀 Transfer Önerilerini Hesapla", type="primary", use_container
 
         if len(df) == 0:
             st.error("❌ Seçilen kriterlere uygun veri bulunamadı!")
+            st.stop()
+
+        # Mağaza sayısı kontrolü - transfer için en az 2 mağaza gerekli
+        unique_magaza_count = df['magaza_kod'].nunique()
+        if unique_magaza_count < 2:
+            st.error("❌ Transfer işlemi için en az 2 mağaza verisi gereklidir!")
+            st.info(f"📊 Mevcut mağaza sayısı: **{unique_magaza_count}**. Lütfen daha fazla mağaza verisi ekleyin.")
             st.stop()
 
         # 4. ÖNCE MAĞAZA BAZINDA COVER HESAPLA VE MAĞAZALARI BELİRLE

@@ -971,16 +971,23 @@ elif menu == "📐 Hesaplama":
             # ============================================
             update_progress(20, "Paket bilgileri ekleniyor...")
             if paket_sevk_aktif:
-                if st.session_state.urun_master is not None and 'paket_ici' in st.session_state.urun_master.columns:
-                    paket_info = st.session_state.urun_master[['urun_kod', 'paket_ici']].copy()
-                    paket_info['urun_kod'] = paket_info['urun_kod'].astype(str)
-                    paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
-                    paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
+                urun_master = st.session_state.urun_master
+                if (urun_master is not None and
+                    'paket_ici' in urun_master.columns and
+                    'urun_kod' in urun_master.columns):
+                    try:
+                        paket_info = urun_master[['urun_kod', 'paket_ici']].copy()
+                        paket_info['urun_kod'] = paket_info['urun_kod'].astype(str)
+                        paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
+                        paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
 
-                    df = df.merge(paket_info, on='urun_kod', how='left')
-                    df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
+                        df = df.merge(paket_info, on='urun_kod', how='left')
+                        df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
+                    except Exception:
+                        df['paket_ici'] = 1
                 else:
                     df['paket_ici'] = 1
+                    st.warning("⚠️ Ürün master'da paket_ici bilgisi bulunamadı, tüm ürünler için paket_ici=1 alındı.")
             else:
                 df['paket_ici'] = 1
             
@@ -1024,19 +1031,31 @@ elif menu == "📐 Hesaplama":
             # 4. KPI VE MG BİLGİLERİ
             # ============================================
             update_progress(35, "KPI değerleri uygulanıyor...")
-            default_fc = kpi_df['forward_cover'].mean() if 'forward_cover' in kpi_df.columns else 7.0
-            
+
+            # default_fc hesapla (güvenli)
+            default_fc = 7.0
+            if not kpi_df.empty and 'forward_cover' in kpi_df.columns:
+                fc_mean = kpi_df['forward_cover'].mean()
+                if pd.notna(fc_mean):
+                    default_fc = fc_mean
+
             df['min_deger'] = 0.0
             df['max_deger'] = 999999.0
-            
-            # MG bilgisi ekle
-            if st.session_state.urun_master is not None and 'mg' in st.session_state.urun_master.columns:
-                urun_m = st.session_state.urun_master[['urun_kod', 'mg']].copy()
-                urun_m['urun_kod'] = urun_m['urun_kod'].astype(str).str.strip()
-                urun_m['mg'] = urun_m['mg'].fillna('0').astype(str).str.strip()
-                df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
-                df = df.merge(urun_m, on='urun_kod', how='left')
-                df['mg'] = df['mg'].fillna('0').str.strip()
+
+            # MG bilgisi ekle (urun_kod ve mg kolonlarını kontrol et)
+            urun_master = st.session_state.urun_master
+            if (urun_master is not None and
+                'mg' in urun_master.columns and
+                'urun_kod' in urun_master.columns):
+                try:
+                    urun_m = urun_master[['urun_kod', 'mg']].copy()
+                    urun_m['urun_kod'] = urun_m['urun_kod'].astype(str).str.strip()
+                    urun_m['mg'] = urun_m['mg'].fillna('0').astype(str).str.strip()
+                    df['urun_kod'] = df['urun_kod'].astype(str).str.strip()
+                    df = df.merge(urun_m, on='urun_kod', how='left')
+                    df['mg'] = df['mg'].fillna('0').str.strip()
+                except Exception:
+                    df['mg'] = '0'
             else:
                 df['mg'] = '0'
 

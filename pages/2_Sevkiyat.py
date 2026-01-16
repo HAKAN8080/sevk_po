@@ -995,78 +995,9 @@ elif menu == "📐 Hesaplama":
             total_magaza = df['magaza_kod'].nunique()
             yeni_urunler = urun_magaza_count[urun_magaza_count < total_magaza * 0.5].index.tolist()
 
-            # ============================================
-            # 2.5. HİÇ MAĞAZAYA GİTMEMİŞ YENİ ÜRÜNLER EKLE
-            # ============================================
-            # Depo'da olup anlık_stok_satis'ta hiç olmayan ürünleri bul
-            urunler_depoda = set(depo_df['urun_kod'].astype(str).unique())
-            urunler_dfde = set(df['urun_kod'].astype(str).unique())
-            eksik_urunler = urunler_depoda - urunler_dfde
-
-            # Depo stok > 300 olanları filtrele
-            eksik_urunler_filtered = []
-            for urun in eksik_urunler:
-                toplam_depo_stok = depo_sum.get(urun, 0)
-                if toplam_depo_stok > 300:
-                    eksik_urunler_filtered.append(urun)
-
-            # ⭐ PERFORMANS: Çok fazla yeni satır oluşmasını engelle (max 200 ürün)
-            MAX_EKSIK_URUN = 200
-            tum_magazalar = magaza_df['magaza_kod'].astype(str).unique()
-            tahmini_satir = len(eksik_urunler_filtered) * len(tum_magazalar)
-
-            if len(eksik_urunler_filtered) > MAX_EKSIK_URUN:
-                # Stok miktarına göre sırala, en yüksek stoklu ürünleri öncelikle al
-                eksik_stok_tuples = [(u, depo_sum.get(u, 0)) for u in eksik_urunler_filtered]
-                eksik_stok_tuples.sort(key=lambda x: x[1], reverse=True)
-                eksik_urunler_filtered = [u for u, _ in eksik_stok_tuples[:MAX_EKSIK_URUN]]
-                detail_text.warning(f"⚠️ {tahmini_satir:,} yeni satır tahmini - performans için {MAX_EKSIK_URUN} ürünle sınırlandırıldı")
-
-            # Yasak set'i oluştur (urun_kod, magaza_kod) tuple'ları
-            yasak_set = set()
-            if (st.session_state.yasak_master is not None and
-                'urun_kod' in st.session_state.yasak_master.columns and
-                'magaza_kod' in st.session_state.yasak_master.columns):
-                yasak_df = st.session_state.yasak_master.copy()
-                yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str).str.strip()
-                yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str).str.strip()
-                yasak_set = set(zip(yasak_df['urun_kod'], yasak_df['magaza_kod']))
-
-            # Tüm mağazalara satır oluştur (yasaklı kombinasyonlar hariç)
-            if len(eksik_urunler_filtered) > 0:
-                yeni_satirlar = []
-                for urun in eksik_urunler_filtered:
-                    for magaza in tum_magazalar:
-                        # Yasak kombinasyonu atla
-                        if (str(urun).strip(), str(magaza).strip()) in yasak_set:
-                            continue
-                        yeni_satirlar.append({
-                            'urun_kod': str(urun),
-                            'magaza_kod': str(magaza),
-                            'stok': 0,
-                            'yol': 0,
-                            'satis': 0,
-                            'ciro': 0.0,
-                            'smm': 0.0 if 'smm' in df.columns else None
-                        })
-
-                if yeni_satirlar:
-                    yeni_df = pd.DataFrame(yeni_satirlar)
-                    # smm kolonu yoksa çıkar
-                    if 'smm' not in df.columns and 'smm' in yeni_df.columns:
-                        yeni_df = yeni_df.drop('smm', axis=1)
-
-                    df = pd.concat([df, yeni_df], ignore_index=True)
-
-                    # ⭐ KRİTİK: Yeni satırlar eklendikten sonra paket_ici'yi güncelle
-                    # (Önceden merge yapıldıysa yeni satırlarda NaN olur)
-                    if 'paket_ici' in df.columns:
-                        df['paket_ici'] = df['paket_ici'].fillna(1).astype(int)
-
-                    # Eksik ürünleri yeni_urunler listesine ekle (initial ihtiyaç için)
-                    for urun in eksik_urunler_filtered:
-                        if urun not in yeni_urunler:
-                            yeni_urunler.append(urun)
+            # NOT: Depo'da olup anlık_stok_satis'ta olmayan ürünler eklenmez
+            # Çünkü bu ürünler için ürün master bilgisi (paket_ici, mg, segment vb.) eksik kalır
+            # Bu ürünleri sevk etmek istiyorsanız, önce anlık_stok_satis CSV'sine ekleyin
 
             # 3. SEGMENTASYON - VERİ TİPİ UYUMLU
             update_progress(30, "Segmentasyon uygulanıyor...")

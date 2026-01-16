@@ -4,6 +4,11 @@ import time
 import numpy as np
 import io
 
+# Helper: Float'tan gelen .0 suffix'ini temizle
+def clean_kod(series):
+    """Ürün/mağaza kodlarındaki .0 suffix'ini temizle"""
+    return series.astype(str).apply(lambda x: x[:-2] if x.endswith('.0') else x)
+
 # Sayfa config
 st.set_page_config(
     page_title="Retail Sevkiyat Planlama",
@@ -917,20 +922,20 @@ elif menu == "📐 Hesaplama":
 
             df = st.session_state.anlik_stok_satis.copy()
             # Float'tan gelen .0 suffix'ini temizle
-            df['urun_kod'] = df['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
-            df['magaza_kod'] = df['magaza_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df['urun_kod'] = clean_kod(df['urun_kod'])
+            df['magaza_kod'] = clean_kod(df['magaza_kod'])
 
             # Sayısal kolonları zorla dönüştür
             for col in ['stok', 'yol', 'satis']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
             depo_df = st.session_state.depo_stok.copy()
-            depo_df['urun_kod'] = depo_df['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
-            depo_df['depo_kod'] = depo_df['depo_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+            depo_df['urun_kod'] = clean_kod(depo_df['urun_kod'])
+            depo_df['depo_kod'] = clean_kod(depo_df['depo_kod'])
             depo_df['stok'] = pd.to_numeric(depo_df['stok'], errors='coerce').fillna(0)
 
             magaza_df = st.session_state.magaza_master.copy()
-            magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+            magaza_df['magaza_kod'] = clean_kod(magaza_df['magaza_kod'])
 
             kpi_df = st.session_state.kpi.copy() if st.session_state.kpi is not None else pd.DataFrame()
             
@@ -978,7 +983,7 @@ elif menu == "📐 Hesaplama":
                     'urun_kod' in urun_master.columns):
                     try:
                         paket_info = urun_master[['urun_kod', 'paket_ici']].copy()
-                        paket_info['urun_kod'] = paket_info['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+                        paket_info['urun_kod'] = clean_kod(paket_info['urun_kod'])
                         paket_info['paket_ici'] = pd.to_numeric(paket_info['paket_ici'], errors='coerce').fillna(1).astype(int)
                         paket_info.loc[paket_info['paket_ici'] < 1, 'paket_ici'] = 1
 
@@ -1050,11 +1055,11 @@ elif menu == "📐 Hesaplama":
                 'urun_kod' in urun_master.columns):
                 try:
                     urun_m = urun_master[['urun_kod', 'mg']].copy()
-                    urun_m['urun_kod'] = urun_m['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                    urun_m['mg'] = urun_m['mg'].fillna('0').astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                    df['urun_kod'] = df['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                    urun_m['urun_kod'] = clean_kod(urun_m['urun_kod']).str.strip()
+                    urun_m['mg'] = clean_kod(urun_m['mg'].fillna('0')).str.strip()
+                    df['urun_kod'] = clean_kod(df['urun_kod']).str.strip()
                     df = df.merge(urun_m, on='urun_kod', how='left')
-                    df['mg'] = df['mg'].fillna('0').str.replace(r'\.0$', '', regex=True).str.strip()
+                    df['mg'] = clean_kod(df['mg'].fillna('0')).str.strip()
                 except Exception:
                     df['mg'] = '0'
             else:
@@ -1339,7 +1344,7 @@ elif menu == "📐 Hesaplama":
             kpi_merged = False
             if not kpi_df.empty and 'mg_id' in kpi_df.columns:
                 kpi_lookup_df = kpi_df.copy()
-                kpi_lookup_df['mg_id'] = kpi_lookup_df['mg_id'].astype(str).str.replace(r'\.0$', '', regex=True)
+                kpi_lookup_df['mg_id'] = clean_kod(kpi_lookup_df['mg_id'])
 
                 # Gerekli kolonları kontrol et ve eksik olanları ekle
                 if 'min_deger' not in kpi_lookup_df.columns:
@@ -1373,8 +1378,8 @@ elif menu == "📐 Hesaplama":
             # Depo stok bilgisini ekle
             depo_stok_merge = depo_df.groupby(['depo_kod', 'urun_kod'])['stok'].sum().reset_index()
             depo_stok_merge.columns = ['depo_kod', 'urun_kod', 'ilk_depo_stok']
-            depo_stok_merge['depo_kod'] = depo_stok_merge['depo_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
-            depo_stok_merge['urun_kod'] = depo_stok_merge['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+            depo_stok_merge['depo_kod'] = clean_kod(depo_stok_merge['depo_kod'])
+            depo_stok_merge['urun_kod'] = clean_kod(depo_stok_merge['urun_kod'])
             result = result.merge(depo_stok_merge, on=['depo_kod', 'urun_kod'], how='left')
             result['ilk_depo_stok'] = result['ilk_depo_stok'].fillna(0)
             
@@ -1391,7 +1396,7 @@ elif menu == "📐 Hesaplama":
                 urun_master = st.session_state.urun_master
                 if urun_master is not None and 'paket_ici' in urun_master.columns:
                     paket_master = urun_master[['urun_kod', 'paket_ici']].drop_duplicates('urun_kod').copy()
-                    paket_master['urun_kod'] = paket_master['urun_kod'].astype(str).str.replace(r'\.0$', '', regex=True)
+                    paket_master['urun_kod'] = clean_kod(paket_master['urun_kod'])
                     paket_master['paket_ici'] = pd.to_numeric(paket_master['paket_ici'], errors='coerce').fillna(1).astype(int)
                     paket_master.loc[paket_master['paket_ici'] < 1, 'paket_ici'] = 1
 
